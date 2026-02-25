@@ -1,0 +1,38 @@
+Tabs {
+  dock: top;
+}
+#main {
+  width: 100%;
+  height: 100%;
+}
+.nbox {
+  border: green;
+}
+Button {
+  width: auto;
+  height: 1;
+  border: none;
+  min-width: 0;
+  padding: 0;
+}
+Input {
+  height: 1;
+  width: auto;
+  padding: 0;
+  border: none;
+}
+LabelInput {
+  height: 1;
+  width: auto;
+  border: none;
+  padding: 0;
+}
+.dashhost {
+  border: none;
+}
+.dashnetwork {
+  border: none;
+}
+.dashinstaller {
+  border: none;
+}

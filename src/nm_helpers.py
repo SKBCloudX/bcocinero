@@ -1,0 +1,92 @@
+import logging
+import libnmstate
+
+from typing import Optional
+from libnmstate.schema import DNS, HostNameState
+from libnmstate.schema import Interface, InterfaceIPv4, InterfaceState
+
+logging.getLogger('libnmstate').setLevel(logging.ERROR)
+
+state = libnmstate.show()
+
+def get_interface_info(profile_name: str) -> dict:
+    d_iface = next(
+        (ifstate for ifstate in state["interfaces"] 
+            if ifstate.get("profile-name", "") == profile_name), {}
+    )
+    return d_iface
+    
+def get_host_info() -> dict:
+    d_host = dict()
+    d_host["name"] = state["hostname"]["running"]
+    d_host["nameserver"] = state["dns-resolver"]["running"]["server"]
+
+    return d_host
+
+def list_interfaces() -> list:
+    return [iface["name"] for iface in state.get("interfaces", []) if
+            iface['type'] == 'ethernet']
+
+def get_interface_state(ifname: str) -> dict:
+    for iface in state.get("interfaces", []):
+        if iface["name"] == ifname:
+            return iface
+    raise ValueError(f"Interface {ifname} not found")
+
+def build_static_ipv4_state(ifname: str, address: str, prefix: int, gateway: str) -> dict:
+    iface_state = {
+        "name": ifname,
+        "type": "ethernet",
+        "state": "up",
+        "ipv4": {
+            "enabled": True,
+            "address": [{"ip": address, "prefix-length": prefix}],
+        },
+    }
+    if gateway:
+        iface_state["ipv4"]["gateway"] = gateway
+    return {"interfaces": [iface_state]}
+
+def build_dhcp_ipv4_state(ifname: str) -> dict:
+    iface_state = {
+        "name": ifname,
+        "type": "ethernet",
+        "state": "up",
+        "ipv4": {
+            "enabled": True,
+            "dhcp": True,
+        },
+    }
+    return {"interfaces": [iface_state]}
+
+def set_hostname(hostname: str) -> dict:
+
+    d_state = {}
+    d_hostname = {
+        HostNameState.CONFIG: hostname
+    }
+    d_state[HostNameState.KEY] = d_hostname
+
+    return d_state
+
+def set_dns_servers(servers: list[str], 
+    search_domains: Optional[list[str]] = None) -> dict:
+
+    d_state = {}
+
+    dns_config = {
+        DNS.CONFIG: {
+            DNS.SERVER: servers,
+        }
+    }
+
+    if search_domains:
+        dns_config[DNS.CONFIG][DNS.SEARCH] = search_domains
+
+    d_state[DNS.KEY] = dns_config
+
+    return d_state
+
+def apply_state(state: dict):
+    libnmstate.apply(state)
+
