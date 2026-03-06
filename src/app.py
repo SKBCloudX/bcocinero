@@ -1,7 +1,7 @@
 from textual.app import App, ComposeResult
 from textual.containers import HorizontalScroll, VerticalScroll
 from textual.screen import Screen
-from textual.widgets import Placeholder, Footer, Header, Static, TabbedContent, TabPane
+from textual.widgets import Footer, Header, TabbedContent, TabPane
 from dashboard import Dashboard
 from hostnetwork import HostNetwork
 from installer import Installer

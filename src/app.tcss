@@ -1,38 +1,20 @@
-Tabs {
-  dock: top;
-}
-#main {
-  width: 100%;
-  height: 100%;
-}
-.nbox {
-  border: green;
-}
 Button {
-  width: auto;
-  height: 1;
   border: none;
   min-width: 0;
-  padding: 0;
+  margin: 0 1;
 }
-Input {
-  height: 1;
-  width: auto;
-  padding: 0;
+.title {
+  text-style: bold;
+}
+.hostdns {
+  align: left top;
   border: none;
 }
-LabelInput {
-  height: 1;
-  width: auto;
-  border: none;
-  padding: 0;
+Hostname {
+  align: left top;
+  height: auto;
 }
-.dashhost {
-  border: none;
-}
-.dashnetwork {
-  border: none;
-}
-.dashinstaller {
-  border: none;
+Nameserver {
+  align: left top;
+  height: auto;
 }
