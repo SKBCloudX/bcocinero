@@ -1,4 +1,5 @@
 import logging
+import yaml
 import libnmstate
 
 from typing import Optional
@@ -14,35 +15,6 @@ from libnmstate.schema import (
 
 logging.getLogger('libnmstate').setLevel(logging.ERROR)
 
-
-def create_bond(name: str, ports: list[str], mode: str = "active-standby"):
-    d_state = {
-        Interface.KEY: []
-    }
-    for iface in ports:
-        d_state[Interface.KEY].append(
-            {
-                Interface.NAME: iface,
-                Interface.TYPE: InterfaceType.ETHERNET,
-                Interface.STATE: InterfaceState.UP,
-            }
-        )
-    d_state[Interface.KEY].append(
-        {
-            Interface.NAME: name,
-            Interface.TYPE: InterfaceType.BOND,
-            Interface.STATE: InterfaceState.UP,
-            Bond.CONFIG_SUBTREE: {
-                Bond.MODE: mode,
-                Bond.PORT: ports,
-                Bond.OPTIONS_SUBTREE: {
-                    "miimon": "100",
-                },
-            },
-        }
-    )
-
-    libnmstate.apply(d_state)
 
 def get_interface_info(name: str) -> dict:
     state = libnmstate.show()
@@ -116,6 +88,42 @@ def set_dns_servers(servers: list[str],
 
     return d_state
 
-def apply_state(state: dict):
+def create_bond(
+    name: str,
+    ports: list[str],
+    mode: str = "active-standby") -> dict:
+    d_state = {
+        Interface.KEY: []
+    }
+    for iface in ports:
+        d_state[Interface.KEY].append(
+            {
+                Interface.NAME: iface,
+                Interface.TYPE: InterfaceType.ETHERNET,
+                Interface.STATE: InterfaceState.UP,
+            }
+        )
+    d_state[Interface.KEY].append(
+        {
+            Interface.NAME: name,
+            Interface.TYPE: InterfaceType.BOND,
+            Interface.STATE: InterfaceState.UP,
+            Bond.CONFIG_SUBTREE: {
+                Bond.MODE: mode,
+                Bond.PORT: ports,
+                Bond.OPTIONS_SUBTREE: {
+                    "miimon": "100",
+                },
+            },
+        }
+    )
+
+    return d_state
+
+def save_state(filename: str, state: dict) -> None:
+    with open(filename, 'w', encoding='utf-8') as f:
+        yaml.dump(state, f, allow_unicode=True)
+
+def apply_state(state: dict) -> None:
     libnmstate.apply(state)
 

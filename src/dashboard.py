@@ -1,4 +1,3 @@
-import yaml
 from textual import log, on
 from textual.app import App, ComposeResult
 from textual.containers import VerticalScroll
@@ -94,12 +93,10 @@ class Dashboard(VerticalScroll):
         d_state = {}
         if result:
             d_state = set_hostname(result["hostname"])
-            with open('host.yaml', 'w', encoding='utf-8') as f:
-                yaml.dump(d_state, f, allow_unicode=True)
+            save_state("host.yaml", d_state)
             apply_state(d_state)
             d_state = set_dns_servers([result["nameserver"]])
-            with open('nameserver.yaml', 'w', encoding='utf-8') as f:
-                yaml.dump(d_state, f, allow_unicode=True)
+            save_state("nameserver.yaml", d_state)
             apply_state(d_state)
             hostinfo.update_host_info()
             d_host = get_host_info()
