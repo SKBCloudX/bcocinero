@@ -14,6 +14,7 @@ from nm_helpers import (
     build_static_ipv4_state,
     set_hostname,
     set_dns_servers,
+    save_state,
     apply_state,
 )
 

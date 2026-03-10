@@ -10,6 +10,9 @@ from textual.widgets import RadioSet, RadioButton
 
 from nm_helpers import (
     list_interfaces,
+    get_interface_info,
+    get_bond_interfaces,
+    delete_bond_interface,
     create_bond,
     save_state,
     apply_state,
@@ -17,27 +20,42 @@ from nm_helpers import (
 
 
 class BondingList(Widget):
-    l_iface = list_interfaces(["bonding"])
-    l_bond = [("Name", "Ports", "Mode", "State"),]
-    for iface in l_iface:
-        bname = iface.get(Interface.NAME)
-        bstate = iface.get(Interface.STATE)
-        bmode = ""
-        bports = []
-        bconfig = iface.get(Bond.CONFIG_SUBTREE, {})
-        if bconfig:
-            bmode = bconfig.get(Bond.MODE)
-            bports = bconfig.get(Bond.PORT_SUBTREE, [])
-        l_bond.append([(bname, "/".join(bports), bmode, bstate)])
+    l_bond_header = ["Name", "Ports", "Mode", "State", "Edit", "Delete"]
+    l_bond_data = get_bond_interfaces()
 
     def compose(self) -> ComposeResult:
         yield DataTable()
 
     def on_mount(self) -> None:
+        self.log(self.l_bond_data)
         table = self.query_one(DataTable)
-        table.add_columns(*self.l_bond[0])
-        for row in self.l_bond[1:]:
-            table.add_row(row)
+        table.add_columns(*self.l_bond_header)
+        for name, ports, mode, state in self.l_bond_data:
+            table.add_row(name, ports, mode, state, "EDIT", "DELETE")
+
+    def on_data_table_cell_selected(self,
+            event: DataTable.CellSelected) -> None:
+        cell_key = event.cell_key
+        value = event.value
+        self.log(f"{cell_key} : {value} :")
+        if event.coordinate.column in [4, 5]:
+            row_index = event.coordinate.row
+            table = self.query_one(DataTable)
+            row_data = table.get_row_at(row_index)
+            if value == "DELETE":
+                delete_bond_interface(row_data[0])
+                self.refresh_table()
+                self.notify(f"Deleted {row_data[0]}")
+            if value == "Edit":
+
+
+    def refresh_table(self) -> None:
+        table = self.query_one(DataTable)
+        table.clear()
+        self.l_bond_data = get_bond_interfaces()
+        for name, ports, mode, state in self.l_bond_data:
+            table.add_row(name, ports, mode, state, "EDIT", "DELETE")
+
 
 class BondConfigScreen(ModalScreen[dict]):
     MODES = [
@@ -89,8 +107,7 @@ class BondConfigScreen(ModalScreen[dict]):
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         radioset = self.query_one("#mode_list", RadioSet)
         cur = event.pressed
-        self.mode = cur.id
-        self.log(self.mode)
+        self.mode = str(cur.label)
         for btn in radioset.query(RadioButton):
             if btn == cur:
                 btn.value = True
@@ -101,7 +118,6 @@ class BondConfigScreen(ModalScreen[dict]):
         d_result = {}
         bonding_name = self.query_one("#bn", Input).value
         bonding_ports = self.query_one("#port_list", SelectionList).selected
-        self.log(self.mode)
         if event.button.id == "save":
             d_result["name"] = bonding_name
             d_result["ports"] = bonding_ports
@@ -119,6 +135,8 @@ class HostNetwork(VerticalScroll):
                 result["mode"])
             save_state(f"{result['name']}.yaml", d_state)
             apply_state(d_state)
+            self.notify(f"Configured {result['name']}}")
+            self.query_one(BondingList).refresh_table()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "bond-create":

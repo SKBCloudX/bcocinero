@@ -32,13 +32,42 @@ def get_host_info() -> dict:
 
     return d_host
 
-def list_interfaces(iface_type: list = []) -> list:
+def list_interfaces(iface_type: list = []) -> list[dict]:
     state = libnmstate.show()
-    l_allowed_types = ["ethernet", "bonding", "vlan"]
+    l_allowed_types = ["ethernet", "bond", "vlan"]
     if iface_type:
         l_allowed_types = iface_type
     return [iface for iface 
         in state.get("interfaces", []) if iface["type"] in l_allowed_types]
+
+def get_bond_interfaces() -> list[tuple]:
+    l_iface = list_interfaces(["bond"])
+    l_bond = []
+    for iface in l_iface:
+        bname = iface.get(Interface.NAME)
+        bstate = iface.get(Interface.STATE)
+        bmode = ""
+        bports = []
+        bconfig = iface.get(Bond.CONFIG_SUBTREE, {})
+        if bconfig:
+            bmode = bconfig.get(Bond.MODE, "")
+            l_ports = bconfig.get(Bond.PORTS_CONFIG_SUBTREE, [])
+            bports = [p["name"] for p in l_ports]
+        l_bond.append((bname, "/".join(bports), bmode, bstate))
+
+    return l_bond
+
+def delete_bond_interface(bname: str) -> None:
+    state = {
+        "interfaces": [
+            {
+                "name": bname,
+                "type": "bond",
+                "state": "absent"
+            }
+        ]
+    }
+    apply_state(state)
 
 def get_interface_state(ifname: str) -> dict:
     state = libnmstate.show()
