@@ -2,6 +2,7 @@ from typing import Optional
 from textual import log
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widget import Widget
@@ -18,8 +19,12 @@ from nm_helpers import (
     apply_state,
 )
 
+class OpenBondConfig(Message):
+    def __init__(self, d_iface: dict) -> None:
+        self.d_iface = d_iface
+        super().__init__()
 
-class BondingList(Widget):
+class ListBond(Widget):
     l_bond_header = ["Name", "Ports", "Mode", "State", "Edit", "Delete"]
     l_bond_data = get_bond_interfaces()
 
@@ -37,7 +42,6 @@ class BondingList(Widget):
             event: DataTable.CellSelected) -> None:
         cell_key = event.cell_key
         value = event.value
-        self.log(f"{cell_key} : {value} :")
         if event.coordinate.column in [4, 5]:
             row_index = event.coordinate.row
             table = self.query_one(DataTable)
@@ -45,9 +49,11 @@ class BondingList(Widget):
             if value == "DELETE":
                 delete_bond_interface(row_data[0])
                 self.refresh_table()
+                self.app.refresh_dashboard_interface_table()
                 self.notify(f"Deleted {row_data[0]}")
-            if value == "Edit":
-
+            if value == "EDIT":
+                d_iface = get_interface_info(row_data[0])
+                self.post_message(OpenBondConfig(d_iface))
 
     def refresh_table(self) -> None:
         table = self.query_one(DataTable)
@@ -67,10 +73,16 @@ class BondConfigScreen(ModalScreen[dict]):
         ("balance-tlb", False),
         ("blanace-alb", False),
     ]
-    mode = "active-backup"
-    def __init__(self, bond: Optional[dict] = None):
+    def __init__(self, d_iface: Optional[dict] = None):
         super().__init__()
-        self.bond = bond
+        if d_iface:
+            self.bond_name = d_iface["name"]
+            self.bond_ports = d_iface["link-aggregation"]["port"]
+            self.bond_mode = d_iface["link-aggregation"]["mode"]
+        else:
+            self.bond_name = ""
+            self.bond_ports = []
+            self.bond_mode = "active-backup"
 
     def compose(self) -> ComposeResult:
         yield Label("Bonding Configuration")
@@ -88,13 +100,18 @@ class BondConfigScreen(ModalScreen[dict]):
             yield Button("Cancel", id="cancel", variant="error")
 
     def on_mount(self) -> None:
+        self.update_name()
         self.update_port_list()
         self.update_mode_list(self.MODES)
+
+    def update_name(self) -> None:
+        self.query_one("#bn").value = self.bond_name
 
     def update_port_list(self) -> None:
         selection_list = self.query_one("#port_list", SelectionList)
         l_iface = list_interfaces(["ethernet"])
-        options = [(iface["name"], iface["name"]) for iface in l_iface]
+        options = [(iface["name"], iface["name"], True if iface["name"] in
+            self.bond_ports else False) for iface in l_iface]
         selection_list.add_options(options)
 
     def update_mode_list(self, options: list[tuple]) -> None:
@@ -107,7 +124,7 @@ class BondConfigScreen(ModalScreen[dict]):
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         radioset = self.query_one("#mode_list", RadioSet)
         cur = event.pressed
-        self.mode = str(cur.label)
+        self.bond_mode = str(cur.label)
         for btn in radioset.query(RadioButton):
             if btn == cur:
                 btn.value = True
@@ -116,17 +133,21 @@ class BondConfigScreen(ModalScreen[dict]):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         d_result = {}
-        bonding_name = self.query_one("#bn", Input).value
-        bonding_ports = self.query_one("#port_list", SelectionList).selected
+        self.bond_name = self.query_one("#bn", Input).value
+        self.bond_ports = self.query_one("#port_list", SelectionList).selected
         if event.button.id == "save":
-            d_result["name"] = bonding_name
-            d_result["ports"] = bonding_ports
-            d_result["mode"] = self.mode
+            d_result["name"] = self.bond_name
+            d_result["ports"] = self.bond_ports
+            d_result["mode"] = self.bond_mode
         self.log(d_result)
         self.dismiss(result=d_result)
 
 
 class HostNetwork(VerticalScroll):
+
+    def on_open_bond_config(self, message: OpenBondConfig) -> None:
+        d_iface = message.d_iface
+        self.app.push_screen(BondConfigScreen(d_iface), self.save_bondconfig)
 
     def save_bondconfig(self, result: dict) -> None:
         d_state = {}
@@ -135,8 +156,9 @@ class HostNetwork(VerticalScroll):
                 result["mode"])
             save_state(f"{result['name']}.yaml", d_state)
             apply_state(d_state)
-            self.notify(f"Configured {result['name']}}")
-            self.query_one(BondingList).refresh_table()
+            self.notify(f"Configured {result['name']}")
+            self.query_one(ListBond).refresh_table()
+            self.app.refresh_dashboard_interface_table()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "bond-create":
@@ -146,6 +168,6 @@ class HostNetwork(VerticalScroll):
         with Horizontal():
             yield Label("Bonding", classes="title")
             yield Button(label="Create", id="bond-create", variant="primary")
-        yield BondingList()
+        yield ListBond()
         
 

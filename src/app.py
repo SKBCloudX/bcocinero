@@ -1,5 +1,6 @@
 from textual.app import App, ComposeResult
 from textual.containers import HorizontalScroll, VerticalScroll
+from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widgets import Footer, Header, TabbedContent, TabPane
 from dashboard import Dashboard
@@ -31,6 +32,12 @@ class BcocineroScreen(Screen):
 
 class Bcocinero(App):
     """Burrito Chef"""
+
+    def refresh_dashboard_interface_table(self):
+        try:
+            self.query_one("#dashboard_interface").refresh_table()
+        except NoMatches:
+            pass
 
     def on_mount(self) -> None:
         self.title = "BCocinero"

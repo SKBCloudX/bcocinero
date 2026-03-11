@@ -5,7 +5,7 @@ from textual.reactive import reactive
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import Button, Input, Label
+from textual.widgets import Button, DataTable, Input, Label
 
 from nm_helpers import (
     get_host_info,
@@ -31,20 +31,6 @@ class HostInfo():
 
 hostinfo = HostInfo()
 
-class LabelInput(Widget):
-    def __init__(self, label: str, id: str, value: str, placeholder: str):
-        super().__init__()
-        self.label = label
-        self.id = id
-        self.value = value
-        self.placeholder = placeholder
-
-    def compose(self):
-        with Horizontal():
-            yield Label(f"{self.label}: ")
-            yield Input(value=self.value, placeholder=self.placeholder,
-                    id=self.id)
-
 class Hostname(Widget):
     hostname = reactive(hostinfo.d_host["name"])
 
@@ -57,6 +43,33 @@ class Nameserver(Widget):
     def render(self) -> str:
         return f"Nameserver: {self.nameserver}"
 
+class ListInterface(Widget):
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.l_iface_header = ["Name", "Type", "MAC Addr."]
+        self.l_interface = list_interfaces()
+
+    def compose(self) -> ComposeResult:
+        self.id = "dashboard_interface"
+        yield DataTable()
+
+    def _add_rows(self, table) -> None:
+        for iface in self.l_interface:
+            self.log(iface)
+            table.add_row(iface["name"], iface["type"], iface["mac-address"])
+        
+    def on_mount(self) -> None:
+        table = self.query_one(DataTable)
+        table.add_columns(*self.l_iface_header)
+        self._add_rows(table)
+
+    def refresh_table(self) -> None:
+        table = self.query_one(DataTable)
+        table.clear()
+        self.l_interface = list_interfaces()
+        self.log(self.l_interface)
+        #self._add_rows(table)
 
 class HostConfigScreen(ModalScreen[dict]):
     """Create Host config modal screen"""
@@ -122,9 +135,7 @@ class Dashboard(VerticalScroll):
                 yield Nameserver()
             with VerticalScroll():
                 yield Label("Interfaces", classes="title")
-                #yield Label(f"Ethernet: {','.join(hostinfo.l_iface)}")
-                for iface in hostinfo.l_iface:
-                    yield Label(f"{iface['name']}({iface['type']}): {iface['mac-address']}")
+                yield ListInterface()
         with Vertical():
             yield Label("Network", classes="title")
             with Horizontal():
