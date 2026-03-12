@@ -35,9 +35,9 @@ class Bcocinero(App):
 
     def refresh_dashboard_interface_table(self):
         try:
-            self.query_one("#dashboard_interface").refresh_table()
+            self.screen.query_one("#dashboard_interface").refresh_table()
         except NoMatches:
-            pass
+            self.log("Cannot find #dashboard_interface widget")
 
     def on_mount(self) -> None:
         self.title = "BCocinero"

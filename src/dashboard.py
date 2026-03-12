@@ -46,18 +46,21 @@ class Nameserver(Widget):
 class ListInterface(Widget):
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(id="dashboard_interface")
         self.l_iface_header = ["Name", "Type", "MAC Addr."]
         self.l_interface = list_interfaces()
 
     def compose(self) -> ComposeResult:
-        self.id = "dashboard_interface"
         yield DataTable()
 
     def _add_rows(self, table) -> None:
         for iface in self.l_interface:
             self.log(iface)
-            table.add_row(iface["name"], iface["type"], iface["mac-address"])
+            table.add_row(
+                iface.get("name", "N/A"), 
+                iface.get("type", "N/A"),
+                iface.get("mac-address", "N/A")
+            )
         
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
@@ -69,7 +72,7 @@ class ListInterface(Widget):
         table.clear()
         self.l_interface = list_interfaces()
         self.log(self.l_interface)
-        #self._add_rows(table)
+        self._add_rows(table)
 
 class HostConfigScreen(ModalScreen[dict]):
     """Create Host config modal screen"""
@@ -133,7 +136,7 @@ class Dashboard(VerticalScroll):
                     variant="primary")
                 yield Hostname()
                 yield Nameserver()
-            with VerticalScroll():
+            with Vertical():
                 yield Label("Interfaces", classes="title")
                 yield ListInterface()
         with Vertical():
