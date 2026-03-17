@@ -9,15 +9,14 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import Button, DataTable, Input, Label, SelectionList
-from textual.widgets import RadioSet, RadioButton
+from textual.widgets import RadioSet, RadioButton, Select
 
 from nm_helpers import (
     list_interfaces,
     get_interface_info,
     get_vlan_interfaces,
-    delete_vlan_interface,
+    delete_interface,
     get_bond_interfaces,
-    delete_bond_interface,
     create_bond,
     create_vlan,
     save_state,
@@ -65,14 +64,7 @@ class ListVlan(Widget):
         table.clear()
         l_vlan_data = get_vlan_interfaces()
         for name, base, vid, ip, state in l_vlan_data:
-            table.add_row(name, base, vid, ip, state, "[bold red]DELETE[/]")
-
-    def check_confirm(result: bool) -> None:
-        if result:
-            delete_vlan_interface(vlan_name)
-            self.notify(f"VLAN {vlan_name} deleted.")
-            self.refresh_table()
-            self.app.refresh_dashboard_interface_table()
+            table.add_row(name, base, vid, ip, state, "[#ffffff on #af0000]DELETE[/]")
 
     def on_data_table_cell_selected(self,
             event: DataTable.CellSelected) -> None:
@@ -83,43 +75,63 @@ class ListVlan(Widget):
             s_msg = f"Are you sure to delete VLAN '{vlan_name}'?"
             self.app.push_screen(ConfirmScreen(s_msg), self.check_confirm)
 
+    def check_confirm(result: bool) -> None:
+        if result:
+            delete_interface(vlan_name)
+            self.notify(f"VLAN {vlan_name} is deleted.")
+            self.refresh_table()
+            self.app.refresh_dashboard_interface_table()
+
+
 class ListBond(Widget):
     l_bond_header = ["Name", "Ports", "Mode", "State", "Edit", "Delete"]
     l_bond_data = get_bond_interfaces()
 
     def compose(self) -> ComposeResult:
-        yield DataTable(id="bond_table")
+        yield DataTable(id="bond_table", cursor_type="cell")
 
     def on_mount(self) -> None:
         table = self.query_one("#bond_table", DataTable)
         table.add_columns(*self.l_bond_header)
-        for name, ports, mode, state in self.l_bond_data:
-            table.add_row(name, ports, mode, state, "EDIT", "DELETE")
-
-    def on_data_table_cell_selected(self,
-            event: DataTable.CellSelected) -> None:
-        cell_key = event.cell_key
-        value = event.value
-        if event.coordinate.column in [4, 5]:
-            row_index = event.coordinate.row
-            table = self.query_one("#bond_table", DataTable)
-            row_data = table.get_row_at(row_index)
-            bond_name = row_data[0]
-            if value == "DELETE":
-                delete_bond_interface(bond_name)
-                self.refresh_table()
-                self.app.refresh_dashboard_interface_table()
-                self.notify(f"Deleted {bond_name}")
-            if value == "EDIT":
-                d_iface = get_interface_info(bond_name)
-                self.post_message(OpenBondConfig(d_iface))
+        self.refresh_table()
 
     def refresh_table(self) -> None:
         table = self.query_one("#bond_table", DataTable)
         table.clear()
         self.l_bond_data = get_bond_interfaces()
         for name, ports, mode, state in self.l_bond_data:
-            table.add_row(name, ports, mode, state, "EDIT", "DELETE")
+            table.add_row(
+                name,
+                ports,
+                mode,
+                state,
+                "[#000000 on #00afaf] EDIT [/]",
+                "[#ffffff on #af0000] DELETE [/]"
+            )
+
+    def on_data_table_cell_selected(self,
+            event: DataTable.CellSelected) -> None:
+        col = event.coordinate.column
+        row_index = event.coordinate.row
+        table = self.query_one("#bond_table", DataTable)
+        row_data = table.get_row_at(row_index)
+        bond_name = row_data[0]
+
+        if col == 4:  # EDIT
+            d_iface = get_interface_info(bond_name)
+            self.post_message(OpenBondConfig(d_iface))
+        elif col == 5:  # DELETE
+            self.app.push_screen(
+                ConfirmScreen(f"Delete Bond '{bond_name}'?"),
+                lambda result: self.handle_delete_result(result, bond_name)
+            )
+
+    def handle_delete_result(self, result: bool, bond_name: str) -> None:
+        if result:
+            delete_interface(bond_name)
+            self.refresh_table()
+            self.app.refresh_dashboard_interface_table()
+            self.notify(f"{bond_name} is deleted.")
 
 
 class BondConfigScreen(ModalScreen[dict]):
@@ -215,22 +227,24 @@ class BondConfigScreen(ModalScreen[dict]):
             self.dismiss(None)
 
 class VlanConfigScreen(ModalScreen[dict]):
-    def __init__(self, base_iface: str = "bond0"):
+    def __init__(self):
         super().__init__()
-        self.base_iface = base_iface
+        self.bond_data = get_bond_interfaces()
+        self.bond_options = [(bond[0], bond[0]) for bond in self.bond_data]
 
     def compose(self) -> ComposeResult:
-        yield Label(f"VLAN Configuration (Base: {self.base_iface})")
+        yield Label(f"VLAN Configuration")
         with Horizontal():
-            yield Label("VLAN Name")
-            yield Input(id="vn", placeholder="e.g. bond0.100")
+            yield Label("Base Interface")
+            yield Select(self.bond_options, id="base_iface",
+                prompt="Select Bond Interface")
         with Horizontal():
             yield Label("VLAN ID")
-            yield Input(id="vid", placeholder="1-4094")
+            yield Input(id="vid", placeholder="1-4094", restrict=r"^[0-9]*$")
         with Horizontal():
             yield Label("IP Addr")
             yield Input(id="vip", placeholder="192.168.21.100")
-            yield Input(id="vprefix", value="24")
+            yield Input(id="vprefix", value="24", restrict=r"^[0-9]*$")
         with Horizontal():
             yield Label("Gateway")
             yield Input(id="vgw")
@@ -241,8 +255,14 @@ class VlanConfigScreen(ModalScreen[dict]):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save":
             try:
-                vname = self.query_one("#vn", Input).value.strip()
-                vid = int(self.query_one("#vid", Input).value)
+                base_iface = self.query_one("#base_iface", Select).value
+                if base_iface is Select.BLANK:
+                    raise ValueError("Select Base Interface.")
+                vid_val = self.query_one("#vid", Input).value
+                if not vid_val:
+                    raise ValueError("VLAN ID is required.")
+                vid = int(vid_val)
+                vname = f"{base_iface}.{vid}"
                 vip = self.query_one("#vip", Input).value.strip()
                 vprefix = int(self.query_one("#vprefix", Input).value)
                 vgw = self.query_one("#vgw", Input).value.strip()
@@ -258,15 +278,15 @@ class VlanConfigScreen(ModalScreen[dict]):
 
                 d_result = {
                     "name": vname,
-                    "base": self.base_iface,
+                    "base": base_iface,
                     "id": vid,
-                    "ip": vip,
-                    "prefix": vprefix,
-                    "gw": vgw
+                    "ip": vip if vip else None,
+                    "prefix": vprefix if vip else None,
+                    "gw": vgw if vgw else None
                 }
                 self.dismiss(d_result)
             except ValueError as e:
-                self.notify("Input error: {str(e)}", severity="error")
+                self.notify(f"Input error: {e}", severity="error")
         else:
             self.dismiss(None)
 
@@ -317,5 +337,5 @@ class HostNetwork(VerticalScroll):
         with Horizontal():
             yield Label("Bonding", classes="title")
             yield Button(label="Create", id="bond-create", variant="primary")
-        yield ListBond()
+        yield ListBond(id="bond_list_widget")
         

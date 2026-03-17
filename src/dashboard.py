@@ -10,8 +10,6 @@ from textual.widgets import Button, DataTable, Input, Label
 from nm_helpers import (
     get_host_info,
     list_interfaces,
-    get_interface_state,
-    build_static_ipv4_state,
     set_hostname,
     set_dns_servers,
     save_state,
@@ -94,14 +92,15 @@ class HostConfigScreen(ModalScreen[dict]):
                 Button("Cancel", id="cancel", variant="error"))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        d_result = {}
-        input_hn = self.query_one("#hn")
-        input_ns = self.query_one("#ns")
         if event.button.id == "save":
-            d_result["hostname"] = input_hn.value
-            d_result["nameserver"] = input_ns.value
-        self.log(d_result)
-        self.dismiss(result=d_result)
+            d_result = {
+                "hostname": self.query_one("#hn", Input).value,
+                "nameserver": self.query_one("#ns", Input).value
+            }
+            self.log(d_result)
+            self.dismiss(result=d_result)
+        else:
+            self.dismiss(None)
 
 
 class Dashboard(VerticalScroll):

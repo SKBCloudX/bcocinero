@@ -28,7 +28,7 @@ class BcocineroScreen(Screen):
         #yield self.footer
 
     def action_switch_tab(self, tab: str) -> None:
-        self.get_child_by_type(TabbedContent).active = tab
+        self.query_one("#main", TabbedContent).active = tab
 
 class Bcocinero(App):
     """Burrito Chef"""
