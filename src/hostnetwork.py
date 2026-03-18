@@ -64,7 +64,14 @@ class ListVlan(Widget):
         table.clear()
         l_vlan_data = get_vlan_interfaces()
         for name, base, vid, ip, state in l_vlan_data:
-            table.add_row(name, base, vid, ip, state, "[#ffffff on #af0000]DELETE[/]")
+            table.add_row(
+                name,
+                base,
+                vid,
+                ip,
+                state,
+                "[#ffffff on #af0000]DELETE[/]"
+            )
 
     def on_data_table_cell_selected(self,
             event: DataTable.CellSelected) -> None:
@@ -73,9 +80,10 @@ class ListVlan(Widget):
             row_data = table.get_row_at(event.coordinate.row)
             vlan_name = row_data[0]
             s_msg = f"Are you sure to delete VLAN '{vlan_name}'?"
-            self.app.push_screen(ConfirmScreen(s_msg), self.check_confirm)
+            self.app.push_screen(ConfirmScreen(s_msg),
+                lambda result: self.check_confirm(result, vlan_name))
 
-    def check_confirm(result: bool) -> None:
+    def check_confirm(self, result: bool, vlan_name: str) -> None:
         if result:
             delete_interface(vlan_name)
             self.notify(f"VLAN {vlan_name} is deleted.")
@@ -121,10 +129,9 @@ class ListBond(Widget):
             d_iface = get_interface_info(bond_name)
             self.post_message(OpenBondConfig(d_iface))
         elif col == 5:  # DELETE
-            self.app.push_screen(
-                ConfirmScreen(f"Delete Bond '{bond_name}'?"),
-                lambda result: self.handle_delete_result(result, bond_name)
-            )
+            s_msg = f"Are you sure to delete Bond '{bond_name}'?"
+            self.app.push_screen(ConfirmScreen(s_msg),
+                lambda result: self.handle_delete_result(result, bond_name))
 
     def handle_delete_result(self, result: bool, bond_name: str) -> None:
         if result:

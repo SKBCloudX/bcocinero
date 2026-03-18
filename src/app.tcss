@@ -3,21 +3,6 @@ Button {
   min-width: 0;
   margin: 0 1;
 }
-.title {
-  text-style: bold;
-}
-.hostdns {
-  align: left top;
-  border: none;
-}
-Hostname {
-  align: left top;
-  height: auto;
-}
-Nameserver {
-  align: left top;
-  height: auto;
-}
 #confirm_dialog {
     grid-size: 2;
     grid-gutter: 1;

@@ -6,6 +6,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import Button, DataTable, Input, Label
+from typing import Optional, Dict, Any
 
 from nm_helpers import (
     get_host_info,
@@ -49,7 +50,12 @@ class ListInterface(Widget):
         self.l_interface = list_interfaces()
 
     def compose(self) -> ComposeResult:
-        yield DataTable()
+        yield DataTable(id="list_interface_table")
+
+    def on_mount(self) -> None:
+        table = self.query_one("#list_interface_table", DataTable)
+        table.add_columns(*self.l_iface_header)
+        self._add_rows(table)
 
     def _add_rows(self, table) -> None:
         for iface in self.l_interface:
@@ -60,16 +66,10 @@ class ListInterface(Widget):
                 iface.get("mac-address", "N/A")
             )
         
-    def on_mount(self) -> None:
-        table = self.query_one(DataTable)
-        table.add_columns(*self.l_iface_header)
-        self._add_rows(table)
-
     def refresh_table(self) -> None:
-        table = self.query_one(DataTable)
+        table = self.query_one("#list_interface_table", DataTable)
         table.clear()
         self.l_interface = list_interfaces()
-        self.log(self.l_interface)
         self._add_rows(table)
 
 class HostConfigScreen(ModalScreen[dict]):
@@ -81,15 +81,16 @@ class HostConfigScreen(ModalScreen[dict]):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Label("Host Configuration")
+            yield Label("Host Configuration", classes="modal_title")
             with Horizontal():
-                yield Label("Hostname: ")
+                yield Label("Hostname: ", classes="input_label")
                 yield Input(value=self.hostname, id="hn")
             with Horizontal():
-                yield Label("Nameserver: ")
+                yield Label("Nameserver: ", classes="input_label")
                 yield Input(value=self.nameserver, id="ns")
-            yield Horizontal(Button("Save", id="save", variant="primary"),
-                Button("Cancel", id="cancel", variant="error"))
+            with Horizontal(classes="modal_buttons"):
+                yield Button("Save", id="save", variant="primary")
+                yield Button("Cancel", id="cancel", variant="error")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save":
@@ -97,7 +98,6 @@ class HostConfigScreen(ModalScreen[dict]):
                 "hostname": self.query_one("#hn", Input).value,
                 "nameserver": self.query_one("#ns", Input).value
             }
-            self.log(d_result)
             self.dismiss(result=d_result)
         else:
             self.dismiss(None)
@@ -105,58 +105,49 @@ class HostConfigScreen(ModalScreen[dict]):
 
 class Dashboard(VerticalScroll):
     """Widget to display dashboard."""
-    def save_hostconfig(self, result: dict) -> None:
-        d_state = {}
-        if result:
+    def save_hostconfig(self, result: Optional[Dict[str, str]]) -> None:
+        if not result:
+            return
+
+        try:
             d_state = set_hostname(result["hostname"])
             save_state("host.yaml", d_state)
             apply_state(d_state)
+
             d_state = set_dns_servers([result["nameserver"]])
             save_state("nameserver.yaml", d_state)
             apply_state(d_state)
+
             hostinfo.update_host_info()
             d_host = get_host_info()
             self.query_one(Hostname).hostname = result["hostname"]
             self.query_one(Nameserver).nameserver = result["nameserver"]
+
+            self.notify("Configured hostname and nameserver.")
+        except Exception as e:
+            self.notify(f"Failed to configure: {e}", severity="error")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Button event handler"""
         if event.button.id == "host-config":
             s_hostname = self.query_one(Hostname).hostname
             s_nameserver = self.query_one(Nameserver).nameserver
-            self.app.push_screen(HostConfigScreen(s_hostname, s_nameserver),
-                self.save_hostconfig)
+            self.app.push_screen(
+                HostConfigScreen(s_hostname, s_nameserver),
+                self.save_hostconfig
+            )
 
     def compose(self) -> ComposeResult:
-        with Horizontal():
-            with Vertical(classes="hostdns"):
+        with Vertical(classes="section"):
+            with Horizontal(classes="header_row"):
                 yield Label("Host", classes="title")
                 yield Button(label="Config", id="host-config",
-                    variant="primary")
-                yield Hostname()
-                yield Nameserver()
-            with Vertical():
-                yield Label("Interfaces", classes="title")
-                yield ListInterface()
-        with Vertical():
-            yield Label("Network", classes="title")
-            with Horizontal():
-                with VerticalScroll():
-                    yield Label("Service")
-                    yield Horizontal(Label("Interface: "))
-                    yield Horizontal(Label("IP: "))
-                with VerticalScroll():
-                    yield Label("Management")
-                    yield Horizontal(Label("Interface: "))
-                    yield Horizontal(Label("IP: "))
-                with VerticalScroll():
-                    yield Label("Provider")
-                    yield Horizontal(Label("Interface: "))
-                with VerticalScroll():
-                    yield Label("Storage")
-                    yield Horizontal(Label("Interface: "))
-                    yield Horizontal(Label("IP: "))
+                        variant="primary")
+            yield Hostname()
+            yield Nameserver()
+        with Vertical(classes="section"):
+            yield Label("Interfaces", classes="title")
+            yield ListInterface()
 
-        with Vertical():
-            yield Label("Installer", classes="title")
+        yield Label("Installer", classes="title")
 
