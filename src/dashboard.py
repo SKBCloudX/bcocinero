@@ -1,8 +1,7 @@
-from textual import log, on
+from textual import log
 from textual.app import App, ComposeResult
-from textual.containers import VerticalScroll
 from textual.reactive import reactive
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import Button, DataTable, Input, Label
@@ -32,21 +31,16 @@ hostinfo = HostInfo()
 
 class Hostname(Widget):
     hostname = reactive(hostinfo.d_host["name"])
-
-    def render(self) -> str:
-        return f"Hostname: {self.hostname}"
-
-class Nameserver(Widget):
     nameserver = reactive(",".join(hostinfo.d_host["nameserver"]))
 
     def render(self) -> str:
-        return f"Nameserver: {self.nameserver}"
+        return f"Hostname: {self.hostname} / Nameserver: {self.nameserver}"
 
 class ListInterface(Widget):
 
     def __init__(self) -> None:
         super().__init__(id="dashboard_interface")
-        self.l_iface_header = ["Name", "Type", "MAC Addr."]
+        self.l_iface_header = ["Name", "Type", "MAC Addr.", "IP Addr./Netmask"]
         self.l_interface = list_interfaces()
 
     def compose(self) -> ComposeResult:
@@ -59,11 +53,19 @@ class ListInterface(Widget):
 
     def _add_rows(self, table) -> None:
         for iface in self.l_interface:
-            self.log(iface)
+            # get IP and netmask
+            ip_info = iface.get("ipv4", {})
+            ip_addr = [addr.get("ip") for addr in ip_info.get("address", [])]
+            ip_prefix = [addr.get("prefix-length") for addr in 
+                            ip_info.get("address", [])]
+            s_ip = ""
+            if ip_addr and ip_prefix:
+                s_ip = f"{ip_addr[0]}/{ip_prefix[0]}"
             table.add_row(
                 iface.get("name", "N/A"), 
                 iface.get("type", "N/A"),
-                iface.get("mac-address", "N/A")
+                iface.get("mac-address", "N/A"),
+                s_ip
             )
         
     def refresh_table(self) -> None:
@@ -121,33 +123,33 @@ class Dashboard(VerticalScroll):
             hostinfo.update_host_info()
             d_host = get_host_info()
             self.query_one(Hostname).hostname = result["hostname"]
-            self.query_one(Nameserver).nameserver = result["nameserver"]
+            self.query_one(Hostname).nameserver = result["nameserver"]
 
-            self.notify("Configured hostname and nameserver.")
+            self.app.write_status("Configured hostname and nameserver.")
         except Exception as e:
-            self.notify(f"Failed to configure: {e}", severity="error")
+            self.app.write_status(f"Failed to configure: {e}")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Button event handler"""
         if event.button.id == "host-config":
             s_hostname = self.query_one(Hostname).hostname
-            s_nameserver = self.query_one(Nameserver).nameserver
+            s_nameserver = self.query_one(Hostname).nameserver
             self.app.push_screen(
                 HostConfigScreen(s_hostname, s_nameserver),
                 self.save_hostconfig
             )
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="section"):
-            with Horizontal(classes="header_row"):
+        with Vertical(classes="dashboard_hostname"):
+            with Horizontal():
                 yield Label("Host", classes="title")
                 yield Button(label="Config", id="host-config",
-                        variant="primary")
-            yield Hostname()
-            yield Nameserver()
-        with Vertical(classes="section"):
+                            variant="primary")
+            with Horizontal():
+                yield Hostname()
+        with Vertical(classes="dashboard_interface"):
             yield Label("Interfaces", classes="title")
             yield ListInterface()
-
-        yield Label("Installer", classes="title")
+        with Vertical(classes="dashboard_installer"):
+            yield Label("Installer", classes="title")
 

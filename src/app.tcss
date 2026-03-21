@@ -1,7 +1,16 @@
+Hostname, Nameserver {
+  height: auto;
+}
 Button {
   border: none;
   min-width: 0;
   margin: 0 1;
+}
+StatusBar {
+  dock: bottom;
+  height: 1;
+  background: $accent;
+  color: $text;
 }
 #confirm_dialog {
     grid-size: 2;
@@ -27,4 +36,13 @@ Button {
 Horizontal {
   height: auto;
   align: left middle;
+}
+.dashboard_hostname {
+  height: 1fr;
+}
+.dashboard_interface {
+  height: 3fr;
+}
+.dashboard_installer {
+  height: 2fr;
 }

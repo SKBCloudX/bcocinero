@@ -86,7 +86,7 @@ class ListVlan(Widget):
     def check_confirm(self, result: bool, vlan_name: str) -> None:
         if result:
             delete_interface(vlan_name)
-            self.notify(f"VLAN {vlan_name} is deleted.")
+            self.app.write_status(f"VLAN {vlan_name} is deleted.")
             self.refresh_table()
             self.app.refresh_dashboard_interface_table()
 
@@ -138,7 +138,7 @@ class ListBond(Widget):
             delete_interface(bond_name)
             self.refresh_table()
             self.app.refresh_dashboard_interface_table()
-            self.notify(f"{bond_name} is deleted.")
+            self.app.write_status(f"{bond_name} is deleted.")
 
 
 class BondConfigScreen(ModalScreen[dict]):
@@ -293,7 +293,7 @@ class VlanConfigScreen(ModalScreen[dict]):
                 }
                 self.dismiss(d_result)
             except ValueError as e:
-                self.notify(f"Input error: {e}", severity="error")
+                self.app.write_status(f"Input error: {e}", severity="error")
         else:
             self.dismiss(None)
 
@@ -309,7 +309,7 @@ class HostNetwork(VerticalScroll):
                 result["mode"])
             save_state(f"{result['name']}.yml", d_state)
             apply_state(d_state)
-            self.notify(f"Configured {result['name']}")
+            self.app.write_status(f"Configured {result['name']}")
             self.query_one(ListBond).refresh_table()
             self.app.refresh_dashboard_interface_table()
     
@@ -326,7 +326,8 @@ class HostNetwork(VerticalScroll):
             save_state(f"{result['name']}.yml", d_state)
             apply_state(d_state)
 
-            self.notify(f"VLAN {result['name']} created on {result['base']}")
+            s_msg = f"VLAN {result['name']} created on {result['base']}"
+            self.app.write_status(s_msg)
             self.query_one(ListVlan).refresh_table()
             self.app.refresh_dashboard_interface_table()
 

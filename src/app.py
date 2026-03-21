@@ -1,11 +1,25 @@
+from datetime import datetime
 from textual.app import App, ComposeResult
 from textual.containers import HorizontalScroll, VerticalScroll
 from textual.css.query import NoMatches
+from textual.reactive import reactive
 from textual.screen import Screen
+from textual.widget import Widget
 from textual.widgets import Footer, Header, TabbedContent, TabPane
 from dashboard import Dashboard
 from hostnetwork import HostNetwork
 from installer import Installer
+
+class StatusBar(Widget):
+    message = reactive("Ready")
+    display_msg = reactive("")
+
+    def watch_message(self, msg: str) -> None:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.display_msg = f"[{timestamp}] {msg}"
+
+    def render(self) -> str:
+        return f"{self.display_msg}"
 
 class BcocineroScreen(Screen):
     CSS_PATH = ["app.tcss"]
@@ -25,6 +39,7 @@ class BcocineroScreen(Screen):
                 yield HostNetwork()
             with TabPane("[red][b]I[/b][/red]nstaller", id="installer"):
                 yield Installer()
+        yield StatusBar(id="main_status_bar")
         #yield self.footer
 
     def action_switch_tab(self, tab: str) -> None:
@@ -32,6 +47,12 @@ class BcocineroScreen(Screen):
 
 class Bcocinero(App):
     """Burrito Chef"""
+
+    def write_status(self, msg: str) -> None:
+        try:
+            self.screen.query_one("#main_status_bar").message = msg
+        except NoMatches:
+            self.log("Cannot find #main_status_bar widget")
 
     def refresh_dashboard_interface_table(self):
         try:
