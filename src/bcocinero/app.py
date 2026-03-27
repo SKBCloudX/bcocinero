@@ -6,9 +6,9 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widget import Widget
 from textual.widgets import Footer, Header, TabbedContent, TabPane
-from dashboard import Dashboard
-from hostnetwork import HostNetwork
-from installer import Installer
+from bcocinero.dashboard import Dashboard
+from bcocinero.hostnetwork import HostNetwork
+from bcocinero.installer import Installer
 
 class StatusBar(Widget):
     message = reactive("Ready")
@@ -68,6 +68,9 @@ class Bcocinero(App):
         self.push_screen(BcocineroScreen())
 
 
-if __name__ == "__main__":
+def entrypoint() -> None:
     app = Bcocinero()
     app.run()
+
+if __name__ == "__main__":
+    entrypoint()

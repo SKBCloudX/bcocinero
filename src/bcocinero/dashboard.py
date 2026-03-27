@@ -7,7 +7,7 @@ from textual.widget import Widget
 from textual.widgets import Button, DataTable, Input, Label
 from typing import Optional, Dict, Any
 
-from nm_helpers import (
+from bcocinero.nm_helpers import (
     get_host_info,
     list_interfaces,
     set_hostname,

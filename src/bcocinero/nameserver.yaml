@@ -1,0 +1,4 @@
+dns-resolver:
+  config:
+    server:
+    - 8.8.8.8

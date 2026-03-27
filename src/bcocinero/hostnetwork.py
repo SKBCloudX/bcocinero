@@ -11,7 +11,7 @@ from textual.widget import Widget
 from textual.widgets import Button, DataTable, Input, Label, SelectionList
 from textual.widgets import RadioSet, RadioButton, Select
 
-from nm_helpers import (
+from bcocinero.nm_helpers import (
     list_interfaces,
     get_interface_info,
     get_vlan_interfaces,
