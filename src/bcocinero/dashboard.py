@@ -44,7 +44,10 @@ class ListInterface(Widget):
         self.l_interface = list_interfaces()
 
     def compose(self) -> ComposeResult:
-        yield DataTable(id="list_interface_table")
+        yield DataTable(id="list_interface_table",
+                cursor_type="row",
+                fixed_rows=1,
+                zebra_stripes=True)
 
     def on_mount(self) -> None:
         table = self.query_one("#list_interface_table", DataTable)
@@ -147,7 +150,7 @@ class Dashboard(VerticalScroll):
                             variant="primary")
             with Horizontal():
                 yield Hostname()
-        with Vertical(classes="dashboard_interface"):
+        with VerticalScroll(classes="dashboard_interface"):
             yield Label("Interfaces", classes="title")
             yield ListInterface()
         with Vertical(classes="dashboard_installer"):

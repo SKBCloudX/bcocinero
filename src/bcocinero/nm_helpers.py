@@ -98,10 +98,10 @@ def create_vlan(name: str, base_iface: str, vlan_id: int,
         }
     }
 
-    if ip.strip():
+    if ip:
         vlan_iface["ipv4"] = {
             "enabled": True,
-            "address": [{"ip": ip, "prefix-length": prefix}],
+            "address": [{"ip": ip.strip(), "prefix-length": prefix}],
             "dhcp": False
         }
 

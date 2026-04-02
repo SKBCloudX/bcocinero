@@ -46,3 +46,12 @@ Horizontal {
 .dashboard_installer {
   height: 2fr;
 }
+DataTable {
+  overflow: auto auto;
+  scrollbar-gutter: stable;
+  scrollbar-size: 1 1;
+}
+Input {
+  width: auto;
+  height: auto;
+}

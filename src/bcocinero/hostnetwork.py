@@ -52,7 +52,9 @@ class ListVlan(Widget):
     ]
 
     def compose(self) -> ComposeResult:
-        yield DataTable(id="vlan_table")
+        yield DataTable(id="vlan_table",
+                zebra_stripes=True,
+                fixed_rows=1)
 
     def on_mount(self) -> None:
         table = self.query_one("#vlan_table", DataTable)
@@ -96,7 +98,9 @@ class ListBond(Widget):
     l_bond_data = get_bond_interfaces()
 
     def compose(self) -> ComposeResult:
-        yield DataTable(id="bond_table", cursor_type="cell")
+        yield DataTable(id="bond_table",
+                zebra_stripes=True,
+                fixed_rows=1)
 
     def on_mount(self) -> None:
         table = self.query_one("#bond_table", DataTable)
@@ -224,12 +228,21 @@ class BondConfigScreen(ModalScreen[dict]):
             self.bond_name = self.query_one("#bn", Input).value
             port_list_select = self.query_one("#port_list", SelectionList)
             self.bond_ports = port_list_select.selected
-            d_result = {
-                "name": self.bond_name,
-                "ports": self.bond_ports,
-                "mode": self.bond_mode
-            }
-            self.dismiss(d_result)
+            l_required = []
+            if not self.bond_name:
+                l_required.append("bond name")
+            if not self.bond_ports:
+                l_required.append("bond ports")
+            if not l_required:
+                d_result = {
+                    "name": self.bond_name,
+                    "ports": self.bond_ports,
+                    "mode": self.bond_mode
+                }
+                self.dismiss(d_result)
+            else:
+                s_required = ", ".join(l_required)
+                self.notify(f"missing: {s_required}", severity="error")
         else:
             self.dismiss(None)
 
@@ -249,12 +262,13 @@ class VlanConfigScreen(ModalScreen[dict]):
             yield Label("VLAN ID")
             yield Input(id="vid", placeholder="1-4094", restrict=r"^[0-9]*$")
         with Horizontal():
-            yield Label("IP Addr")
+            yield Label("IP Addr/Prefix")
             yield Input(id="vip", placeholder="192.168.21.100")
+            yield Input("/")
             yield Input(id="vprefix", value="24", restrict=r"^[0-9]*$")
         with Horizontal():
             yield Label("Gateway")
-            yield Input(id="vgw")
+            yield Input(id="vgw", placeholder="192.168.21.1")
         with Horizontal():
             yield Button("Save", id="save", variant="primary")
             yield Button("Cancel", id="cancel", variant="error")
@@ -263,23 +277,32 @@ class VlanConfigScreen(ModalScreen[dict]):
         if event.button.id == "save":
             try:
                 base_iface = self.query_one("#base_iface", Select).value
-                if base_iface is Select.BLANK:
-                    raise ValueError("Select Base Interface.")
+                if base_iface is Select.NULL:
+                    raise ValueError("Please select the base interface.")
+
                 vid_val = self.query_one("#vid", Input).value
                 if not vid_val:
                     raise ValueError("VLAN ID is required.")
                 vid = int(vid_val)
-                vname = f"{base_iface}.{vid}"
-                vip = self.query_one("#vip", Input).value.strip()
-                vprefix = int(self.query_one("#vprefix", Input).value)
-                vgw = self.query_one("#vgw", Input).value.strip()
-
                 if not (1 <= vid <= 4094):
                     raise ValueError("VLAN ID should be between 1 and 4094.")
+
+                vname = f"{base_iface}.{vid}"
+
+                vip = self.query_one("#vip", Input).value.strip()
                 if vip:
                     ipaddress.IPv4Address(vip)
+                else:
+                    raise ValueError("IP address is required.")
+
+                vprefix_val = self.query_one("#vprefix", Input).value
+                if not vprefix_val:
+                    raise ValueError("Prefix is required.")
+                vprefix = int(vprefix_val)
                 if not (0 <= vprefix <= 32):
                     raise ValueError("Prefix should be between 0 and 32.")
+
+                vgw = self.query_one("#vgw", Input).value.strip()
                 if vgw:
                     ipaddress.IPv4Address(vgw)
 
@@ -287,13 +310,13 @@ class VlanConfigScreen(ModalScreen[dict]):
                     "name": vname,
                     "base": base_iface,
                     "id": vid,
-                    "ip": vip if vip else None,
-                    "prefix": vprefix if vip else None,
+                    "ip": vip,
+                    "prefix": vprefix,
                     "gw": vgw if vgw else None
                 }
                 self.dismiss(d_result)
             except ValueError as e:
-                self.app.write_status(f"Input error: {e}", severity="error")
+                self.notify(f"Input error: {e}", severity="error")
         else:
             self.dismiss(None)
 
@@ -339,11 +362,11 @@ class HostNetwork(VerticalScroll):
 
     def compose(self) -> ComposeResult:
         with Horizontal():
-            yield Label("VLAN", classes="title")
-            yield Button(label="Create", id="vlan-create", variant="primary")
-        yield ListVlan(id="vlan_list_widget")
-        with Horizontal():
             yield Label("Bonding", classes="title")
             yield Button(label="Create", id="bond-create", variant="primary")
         yield ListBond(id="bond_list_widget")
+        with Horizontal():
+            yield Label("VLAN", classes="title")
+            yield Button(label="Create", id="vlan-create", variant="primary")
+        yield ListVlan(id="vlan_list_widget")
         
