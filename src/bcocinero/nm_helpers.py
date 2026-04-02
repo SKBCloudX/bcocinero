@@ -2,6 +2,7 @@ import logging
 import yaml
 import libnmstate
 from typing import Optional, List, Dict, Any, Tuple
+from pathlib import Path
 
 logging.getLogger('libnmstate').setLevel(logging.ERROR)
 
@@ -144,9 +145,27 @@ def set_dns_servers(servers: List[str]) -> Dict[str, Any]:
         }
     }
 
+def get_project_root() -> Optional[Path]:
+    cur_path: Path = Path(__file__).resolve()
+    for parent in cur_path.parents:
+        if (parent / "pyproject.toml").exists():
+            return parent
+    return None
+
+def get_artifacts_dir() -> Optional[Path]:
+    artifacts_dir = Path(".")
+    rootdir: Optional[Path] = get_project_root()
+    if rootdir:
+        artifacts_dir = Path(rootdir / "artifacts")
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    return artifacts_dir
+
 def save_state(filename: str, state: Dict[str, Any]) -> None:
+    artifacts_dir: Path = get_artifacts_dir()
+    target: Path = artifacts_dir / filename
     try:
-        with open(filename, 'w', encoding='utf-8') as f:
+        with open(target, 'w', encoding='utf-8') as f:
             yaml.dump(state, f, allow_unicode=True)
     except Exception as e:
         print(f"Save failed: {e}")
