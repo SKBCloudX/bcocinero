@@ -4,7 +4,8 @@ Hostname, Nameserver {
 Button {
   border: none;
   min-width: 0;
-  margin: 0 1;
+  margin: 0 0;
+  padding: 0 1;
 }
 StatusBar {
   dock: bottom;
@@ -55,3 +56,18 @@ Input {
   width: auto;
   height: auto;
 }
+Label {
+  padding: 0 0;
+}
+#edit_lock_label {
+  color: red;
+  padding: 1 1;
+  text_style: bold italic;
+}
+.label-fixed {
+  width: 18;                  
+  content-align: left middle;
+  padding-right: 2;         
+  color: $text-muted;      
+}
+

@@ -1,178 +1,188 @@
 import logging
 import yaml
 import libnmstate
+import configparser
 from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
 
+# set libnmstate log level
 logging.getLogger('libnmstate').setLevel(logging.ERROR)
 
-def get_default_gateway() -> Dict[str, str]:
-    state = libnmstate.show()
-    routes = state.get("routes", {}).get("running", [])
+class ArtifactManager:
+    """load config file and set artifacts directory."""
+    
+    def __init__(self, config_name: str = "config.ini") -> None:
+        self.base_dir: Path = Path(__file__).resolve().parents[2]
+        self.config_path: Path = self.base_dir / config_name
+        self.config: configparser.ConfigParser = configparser.ConfigParser()
 
-    for route in routes:
-        if route.get("destination") == "0.0.0.0/0":
-            return {
-                "gateway": route.get("next-hop-address"),
-                "interface": route.get("next-hop-interface")
+    def get_artifacts_dir(self) -> Path:
+        """return artifacts_dir path."""
+        if not self.config_path.exists():
+            raise FileNotFoundError(f"Cannot read config: {self.config_path}")
+
+        self.config.read(self.config_path, encoding="utf-8")
+        s_config_path: str = self.config.get("DEFAULT", "artifacts_dir", 
+                                             fallback="").strip()
+        
+        if not s_config_path:
+            artifacts_path: Path = self.base_dir / "artifacts"
+        else:
+            artifacts_path = (self.base_dir / s_config_path).resolve()
+       
+        artifacts_path.mkdir(parents=True, exist_ok=True)
+
+        return artifacts_path
+
+    def save_state(self, filename: str, state: Dict[str, Any]) -> Path:
+        """save network state to yaml file."""
+        target: Path = self.get_artifacts_dir() / filename
+        with open(target, 'w', encoding='utf-8') as f:
+            yaml.dump(state, f, default_flow_style=False, allow_unicode=True)
+        return target
+
+
+class NetworkManager:
+    """Class for reading and setting of network interfaces"""
+
+    def __init__(self) -> None:
+        pass
+
+    def _show_state(self) -> Dict[str, Any]:
+        """show the current network state."""
+        return libnmstate.show()
+
+    def apply_state(self, state: Dict[str, Any]) -> None:
+        """apply the configured network state."""
+        try:
+            libnmstate.apply(state)
+        except Exception as e:
+            raise RuntimeError(f"Fail to apply the state: {e}")
+
+    # Read operations
+    def get_host_info(self) -> Dict[str, Any]:
+        """get hostname and nameservers."""
+        state = self._show_state()
+        dns_resolver = state.get("dns-resolver", {}).get("running", {})
+        return {
+            "name": state.get("hostname", {}).get("running", ""),
+            "nameserver": dns_resolver.get("server", [])
+        }
+
+    def get_default_gateway(self) -> Optional[Dict[str, str]]:
+        state = self._show_state()
+        routes = state.get("routes", {}).get("running", [])
+        for route in routes:
+            if route.get("destination") == "0.0.0.0/0":
+                return {
+                    "gateway": route.get("next-hop-address"),
+                    "interface": route.get("next-hop-interface")
+                }
+        return None
+
+    def get_interface_info(self, name: str) -> Dict[str, Any]:
+        """return the interface info."""
+        state = self._show_state()
+        return next(
+            (iface for iface in state.get("interfaces", [])
+                if iface.get("name") == name), {}
+        )
+
+    def list_interfaces(self,
+            iface_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        state = self._show_state()
+        allowed = iface_types or ["ethernet", "bond", "vlan"]
+        return [
+            iface for iface in state.get("interfaces", [])
+            if iface.get("type") in allowed
+        ]
+
+    def get_vlan_interfaces(self) -> List[Tuple[str, str, str, str, str]]:
+        l_vlan: List[Tuple[str, str, str, str, str]] = []
+        for iface in self.list_interfaces(["vlan"]):
+            vconfig = iface.get("vlan", {})
+            ipv4_list = iface.get("ipv4", {}).get("address", [])
+            ip = ipv4_list[0].get("ip", "") if ipv4_list else ""
+            prefix = ipv4_list[0].get("prefix-length", "") if ipv4_list else ""
+            ip_str = f"{ip}/{prefix}"
+            
+            l_vlan.append((
+                iface.get("name", ""),
+                vconfig.get("base-iface", ""),
+                str(vconfig.get("id", "")),
+                ip_str,
+                iface.get("state", "")
+            ))
+        return l_vlan
+
+    def get_bond_interfaces(self) -> List[Tuple[str, str, str, str]]:
+        l_bond: List[Tuple[str, str, str, str]] = []
+        for iface in self.list_interfaces(["bond"]):
+            bconfig = iface.get("link-aggregation", {})
+            l_bond.append((
+                iface.get("name", ""),
+                "/".join(bconfig.get("port", [])),
+                bconfig.get("mode", ""),
+                iface.get("state", "")
+            ))
+        return l_bond
+
+    # execute operations
+    def set_hostname(self, hostname: str) -> Dict[str, Any]:
+        """return hostname desired state."""
+        return {
+            "hostname": {
+                "config": hostname
+            }
+        }
+
+    def set_dns_servers(self, servers: List[str]) -> Dict[str, Any]:
+        """return nameservers desired state."""
+        return {
+            "dns-resolver": {
+                "config": {"server": servers}
+            }
+        }
+
+    def create_bond_state(self, name: str, ports: List[str],
+            mode: str = "active-backup") -> Dict[str, Any]:
+        interfaces = [{"name": port, "state": "up"} for port in ports]
+        interfaces.append({
+            "name": name,
+            "type": "bond",
+            "state": "up",
+            "link-aggregation": {
+                "mode": mode,
+                "port": ports,
+                "options": {"miimon": "100"}
+            }
+        })
+        return {"interfaces": interfaces}
+
+    def create_vlan_state(self, name: str, base_iface: str, vlan_id: int, 
+            ip: str = "", prefix: int = 24, gw: str = "") -> Dict[str, Any]:
+        vlan_iface: Dict[str, Any] = {
+            "name": name, "type": "vlan", "state": "up",
+            "vlan": {"base-iface": base_iface, "id": vlan_id}
+        }
+        if ip:
+            vlan_iface["ipv4"] = {
+                "enabled": True,
+                "address": [{"ip": ip.strip(), "prefix-length": prefix}],
+                "dhcp": False
             }
 
-    return None
-
-def get_interface_info(name: str) -> Dict[str, Any]:
-    state = libnmstate.show()
-    return next(
-        (iface for iface in state.get("interfaces", [])
-            if iface.get("name") == name), {}
-    )
-
-def get_host_info() -> Dict[str, Any]:
-    state = libnmstate.show()
-    dns_resolver = state.get("dns-resolver", {}).get("running", {})
-    return {
-        "name": state.get("hostname", {}).get("running", ""),
-        "nameserver": dns_resolver.get("server", [])
-    }
-
-def list_interfaces(iface_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-    state = libnmstate.show()
-    allowed = iface_types or ["ethernet", "bond", "vlan"]
-    return [iface for iface in state.get("interfaces", []) if iface.get("type") in allowed]
-
-def get_vlan_interfaces() -> List[Tuple[str, str, str, str, str]]:
-    l_vlan = []
-    for iface in list_interfaces(["vlan"]):
-        vname = iface.get("name", "")
-        vstate = iface.get("state", "")
-        vconfig = iface.get("vlan", {})
-        
-        base = vconfig.get("base-iface", "")
-        vid = str(vconfig.get("id", ""))
-        
-        ipv4_list = iface.get("ipv4", {}).get("address", [])
-        ip_str = ipv4_list[0].get("ip", "") if ipv4_list else ""
-        
-        l_vlan.append((vname, base, vid, ip_str, vstate))
-    return l_vlan
-
-def get_bond_interfaces() -> List[Tuple[str, str, str, str]]:
-    l_bond = []
-    for iface in list_interfaces(["bond"]):
-        bname = iface.get("name", "")
-        bstate = iface.get("state", "")
-        bconfig = iface.get("link-aggregation", {})
-        
-        bmode = bconfig.get("mode", "")
-        bports = bconfig.get("port", [])
-        
-        l_bond.append((bname, "/".join(bports), bmode, bstate))
-    return l_bond
-
-def create_bond(name: str,
-                ports: List[str],
-                mode: str = "active-backup") -> Dict[str, Any]:
-    interfaces = []
-    for port in ports:
-        interfaces.append({"name": port, "state": "up"})
-        
-    interfaces.append({
-        "name": name,
-        "type": "bond",
-        "state": "up",
-        "link-aggregation": {
-            "mode": mode,
-            "port": ports,
-            "options": {"miimon": "100"}
-        }
-    })
-    return {"interfaces": interfaces}
-
-def create_vlan(name: str, base_iface: str, vlan_id: int, 
-                ip: str = "", prefix: int = 24, gw: str = "") -> Dict[str, Any]:
-    vlan_iface = {
-        "name": name,
-        "type": "vlan",
-        "state": "up",
-        "vlan": {
-            "base-iface": base_iface,
-            "id": vlan_id
-        }
-    }
-
-    if ip:
-        vlan_iface["ipv4"] = {
-            "enabled": True,
-            "address": [{"ip": ip.strip(), "prefix-length": prefix}],
-            "dhcp": False
-        }
-
-    desired_state = {"interfaces": [vlan_iface]}
-
-    if ip and gw:
-        desired_state["routes"] = {
-            "config": [
-                {
+        desired_state = {"interfaces": [vlan_iface]}
+        if ip and gw:
+            desired_state["routes"] = {
+                "config": [{
                     "destination": "0.0.0.0/0",
                     "next-hop-address": gw.strip(),
                     "next-hop-interface": name
-                }
-            ]
-        }
-    return desired_state
+                }]
+            }
+        return desired_state
 
-def delete_interface(name: str) -> None:
-    state = {"interfaces": [{"name": name, "state": "absent"}]}
-    apply_state(state)
-
-def get_interface_state(ifname: str) -> dict:
-    state = libnmstate.show()
-    for iface in state.get("interfaces", []):
-        if iface["name"] == ifname:
-            return iface
-    raise ValueError(f"Interface {ifname} not found")
-
-def set_hostname(hostname: str) -> Dict[str, Any]:
-    return {
-        "hostname": {
-            "config": hostname
-        }
-    }
-
-def set_dns_servers(servers: List[str]) -> Dict[str, Any]:
-    return {
-        "dns-resolver": {
-            "config": {"server": servers}
-        }
-    }
-
-def get_project_root() -> Optional[Path]:
-    cur_path: Path = Path(__file__).resolve()
-    for parent in cur_path.parents:
-        if (parent / "pyproject.toml").exists():
-            return parent
-    return None
-
-def get_artifacts_dir() -> Optional[Path]:
-    artifacts_dir = Path(".")
-    rootdir: Optional[Path] = get_project_root()
-    if rootdir:
-        artifacts_dir = Path(rootdir / "artifacts")
-        artifacts_dir.mkdir(parents=True, exist_ok=True)
-
-    return artifacts_dir
-
-def save_state(filename: str, state: Dict[str, Any]) -> None:
-    artifacts_dir: Path = get_artifacts_dir()
-    target: Path = artifacts_dir / filename
-    try:
-        with open(target, 'w', encoding='utf-8') as f:
-            yaml.dump(state, f, allow_unicode=True)
-    except Exception as e:
-        print(f"Save failed: {e}")
-
-def apply_state(state: Dict[str, Any]) -> None:
-    try:
-        libnmstate.apply(state)
-    except Exception as e:
-        raise RuntimeError(f"Apply failed: {e}")
+    def delete_interface_state(self, name: str) -> Dict[str, Any]:
+        return {"interfaces": [{"name": name, "state": "absent"}]}
 
