@@ -10,10 +10,8 @@ from textual.widget import Widget
 from textual.widgets import Button, DataTable, Input, Label, SelectionList
 from textual.widgets import RadioSet, RadioButton, Select
 
-# 클래스 기반 helper 임포트
 from bcocinero.nm_helpers import NetworkManager, ArtifactManager
 
-# 전역 인스턴스 사용
 nm = NetworkManager()
 am = ArtifactManager()
 

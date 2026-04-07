@@ -24,7 +24,6 @@ class ListInterface(Widget):
     def __init__(self) -> None:
         super().__init__(id="dashboard_interface")
         self.l_iface_header = ["Name", "Type", "MAC Addr.", "IP Addr./Netmask"]
-        # nm 인스턴스 사용
         self.l_interface = nm.list_interfaces()
 
     def compose(self) -> ComposeResult:
@@ -88,7 +87,8 @@ class HostConfigScreen(ModalScreen[dict]):
             ns_val = self.query_one("#ns", Input).value.strip()
             
             if not hn_val or not ns_val:
-                self.app.notify("모든 항목을 입력해주세요.", severity="error")
+                self.app.notify("Please enter hostname and nameservers.",
+                                severity="error")
                 return
 
             self.dismiss({
