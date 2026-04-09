@@ -2,13 +2,13 @@ import ipaddress
 from typing import Optional, Dict, Any, List, Tuple
 from textual import log
 from textual.app import App, ComposeResult
-from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
+from textual.containers import Container, Grid, Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import Button, DataTable, Input, Label, SelectionList
-from textual.widgets import RadioSet, RadioButton, Select
+from textual.widgets import Button, Checkbox, DataTable, Input, Label
+from textual.widgets import RadioSet, RadioButton, Select, Switch
 
 from bcocinero.nm_helpers import NetworkManager, ArtifactManager
 
@@ -114,6 +114,11 @@ class VlanConfigScreen(ModalScreen[dict]):
         self.is_edit_mode = d_vlan is not None
         self.bond_data = nm.get_bond_interfaces()
         self.bond_options = [(bond[0], bond[0]) for bond in self.bond_data]
+        self.profile_options = [
+            ("service", "service"),
+            ("management", "management"),
+            ("storage", "storage"),
+        ]
 
         if d_vlan:
             self.orig_base = d_vlan.get("base", "")
@@ -153,6 +158,11 @@ class VlanConfigScreen(ModalScreen[dict]):
             yield Label("Gateway", classes="label-fixed")
             yield Input(id="vgw", value=self.orig_gw,
                         placeholder="Gateway IP (e.g. 192.168.21.1)")
+        with Horizontal():
+            yield Label("Profile Name", classes="label-fixed")
+            yield Select(self.profile_options, id="profile",
+                         disabled=self.is_edit_mode,
+                         prompt="Select profile name for the interface.")
         with Horizontal(classes="modal_buttons"):
             yield Button("Save", id="save", variant="primary")
             yield Button("Cancel", id="cancel", variant="error")
@@ -307,10 +317,13 @@ class BondConfigScreen(ModalScreen[dict]):
                 yield Label("Not editable", id="edit_lock_label")
         with Horizontal():
             yield Label("Ports", classes="label-fixed")
-            yield SelectionList(id="port_list")
+            yield Container(id="port_container")
         with Horizontal():
             yield Label("Mode", classes="label-fixed")
             yield RadioSet(id="mode_list")
+        with Horizontal():
+            yield Label("Provider Interface?", classes="label-fixed")
+            yield Switch(id="is_provider", value=False)
         with Horizontal(classes="modal_buttons"):
             yield Button("Save", id="save", variant="primary")
             yield Button("Cancel", id="cancel", variant="error")
@@ -320,13 +333,15 @@ class BondConfigScreen(ModalScreen[dict]):
         self.update_mode_list()
 
     def update_port_list(self) -> None:
-        selection_list = self.query_one("#port_list", SelectionList)
+        container = self.query_one("#port_container", Container)
+        container.remove_children()
+
         l_iface = nm.list_interfaces(["ethernet"])
-        options = [
-            (iface["name"], iface["name"], iface["name"] in self.bond_ports)
-            for iface in l_iface
-        ]
-        selection_list.add_options(options)
+        for iface in l_iface:
+            name = iface["name"]
+            is_checked = name in self.bond_ports
+            container.mount(Checkbox(name, value=is_checked,
+                            id=f"port_{name}"))
 
     def update_mode_list(self) -> None:
         radioset = self.query_one("#mode_list", RadioSet)
@@ -344,9 +359,9 @@ class BondConfigScreen(ModalScreen[dict]):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save":
             name = self.query_one("#bn", Input).value.strip()
-            ports = sorted(
-                self.query_one("#port_list", SelectionList).selected
-            )
+            ports = sorted([
+                str(c.label) for c in self.query("#port_container") if c.value
+            ])
             rs = self.query_one("#mode_list", RadioSet)
             mode = str(rs.pressed_button.label) if rs.pressed_button else self.bond_mode
 

@@ -1,4 +1,5 @@
 import logging
+import subprocess
 import yaml
 import libnmstate
 import configparser
@@ -135,6 +136,10 @@ class NetworkManager:
                 "config": hostname
             }
         }
+
+    def set_role(self, role: str) -> None:
+        """set host role using hostnamectl deployment."""
+        subprocess.run(["sudo", "hostnamectl", "deployment", role], check=True)
 
     def set_dns_servers(self, servers: List[str]) -> Dict[str, Any]:
         """return nameservers desired state."""

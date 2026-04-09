@@ -70,4 +70,23 @@ Label {
   padding-right: 2;         
   color: $text-muted;      
 }
-
+#mode_list {
+  layout: grid;
+  grid-size: 3;
+  grid-columns: 1fr 1fr 1fr;
+  height: auto;
+}
+#port_container {
+  layout: grid;
+  grid-size: 4;
+  grid-columns: 1fr 1fr 1fr 1fr;
+  height: auto;
+}
+#port_container Checkbox {
+  width: auto;
+}
+RadioButton {
+  width: 100%;
+  height: auto;
+  margin-right: 1;
+}
