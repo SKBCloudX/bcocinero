@@ -40,8 +40,8 @@ class ConfirmScreen(ModalScreen[bool]):
 
 class ListVlan(Widget):
     l_vlan_header = [
-        "Name", "Base Interface", "VLAN ID", "IP Address", "State",
-        "Edit", "Delete"
+        "Name", "Profile", "Base", "VID", "IP Address", "State",
+        "Function", ""
     ]
 
     def compose(self) -> ComposeResult:
@@ -72,7 +72,7 @@ class ListVlan(Widget):
         table = self.query_one("#vlan_table", DataTable)
         row_data = table.get_row_at(row_index)
         vlan_name = row_data[0]
-        if col == 5: # EDIT
+        if col == 6: # EDIT
             iface_info =nm.get_interface_info(vlan_name)
 
             ipv4_data = iface_info.get("ipv4", {}).get("address", [])
@@ -84,14 +84,15 @@ class ListVlan(Widget):
 
             d_vlan = {
                 "name": vlan_name,
-                "base": row_data[1],
-                "id": int(row_data[2]),
+                "profile": row_data[1],
+                "base": row_data[2],
+                "id": int(row_data[3]),
                 "ip": ip_str,
                 "prefix": prefix_val,
                 "gw": gw_str
             }
             self.app.push_screen(VlanConfigScreen(d_vlan), self.parent.save_vlanconfig)
-        elif col == 6:  # DELETE
+        elif col == 7:  # DELETE
             s_msg = f"Are you sure to delete VLAN '{vlan_name}'?"
             self.app.push_screen(ConfirmScreen(s_msg),
                 lambda result: self.check_confirm(result, vlan_name))
@@ -121,12 +122,14 @@ class VlanConfigScreen(ModalScreen[dict]):
         ]
 
         if d_vlan:
+            self.orig_profile = d_vlan.get("profile", "")
             self.orig_base = d_vlan.get("base", "")
             self.orig_vid = str(d_vlan.get("id", ""))
             self.orig_ip = d_vlan.get("ip", "")
             self.orig_prefix = str(d_vlan.get("prefix", "24"))
             self.orig_gw = d_vlan.get("gw", "") or ""
         else:
+            self.orig_profile = ""
             self.orig_base = ""
             self.orig_vid = ""
             self.orig_ip = ""
@@ -139,7 +142,6 @@ class VlanConfigScreen(ModalScreen[dict]):
         with Horizontal():
             yield Label("Base Interface", classes="label-fixed")
             yield Select(self.bond_options, id="base_iface",
-                         disabled=self.is_edit_mode,
                          prompt="Select Bond Interface")
         with Horizontal():
             yield Label("VLAN ID", classes="label-fixed")
@@ -161,7 +163,6 @@ class VlanConfigScreen(ModalScreen[dict]):
         with Horizontal():
             yield Label("Profile Name", classes="label-fixed")
             yield Select(self.profile_options, id="profile",
-                         disabled=self.is_edit_mode,
                          prompt="Select profile name for the interface.")
         with Horizontal(classes="modal_buttons"):
             yield Button("Save", id="save", variant="primary")
@@ -171,16 +172,25 @@ class VlanConfigScreen(ModalScreen[dict]):
         base_iface_widget = self.query_one("#base_iface", Select)
         if self.orig_base:
             base_iface_widget.value = self.orig_base
+        profile_widget = self.query_one("#profile", Select)
+        if self.orig_profile:
+            profile_widget.value = self.orig_profile
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save":
             try:
+                profile = self.query_one("#profile", Select).value
+                base_iface = self.query_one("#base_iface", Select).value
+                vid = self.query_one("#vid", Input).value.strip()
                 vip = self.query_one("#vip", Input).value.strip()
                 prefix_text = self.query_one("#vprefix", Input).value.strip()
                 vgw = self.query_one("#vgw", Input).value.strip()
 
                 if self.is_edit_mode:
                     is_changed = (
+                        profile != self.orig_profile or
+                        base_iface != self.orig_base or
+                        vid != self.orig_vid or
                         vip != self.orig_ip or
                         prefix_text != self.orig_prefix or
                         vgw != self.orig_gw
@@ -191,9 +201,10 @@ class VlanConfigScreen(ModalScreen[dict]):
                         self.dismiss(None)
                         return
 
-                base_iface = self.query_one("#base_iface", Select).value
                 if base_iface is Select.NULL:
                     raise ValueError("Please select the base interface.")
+                if profile is Select.NULL:
+                    raise ValueError("Please select the interface profile.")
 
                 vid_text = self.query_one("#vid", Input).value
                 if not vid_text: raise ValueError("VLAN ID is required.")
@@ -213,6 +224,7 @@ class VlanConfigScreen(ModalScreen[dict]):
 
                 self.dismiss({
                     "name": f"{base_iface}.{vid}",
+                    "profile": profile,
                     "base": base_iface,
                     "id": vid,
                     "ip": vip,
@@ -226,7 +238,9 @@ class VlanConfigScreen(ModalScreen[dict]):
 
 
 class ListBond(Widget):
-    l_bond_header = ["Name", "Ports", "Mode", "State", "Edit", "Delete"]
+    l_bond_header = [
+        "Name", "Profile", "Ports", "Mode", "State", "Function", ""
+    ]
 
     def compose(self) -> ComposeResult:
         yield DataTable(id="bond_table",
@@ -257,10 +271,10 @@ class ListBond(Widget):
         row_data = table.get_row_at(row_index)
         bond_name = row_data[0]
 
-        if col == 4:  # EDIT
+        if col == 5:  # EDIT
             d_iface = nm.get_interface_info(bond_name)
             self.post_message(OpenBondConfig(d_iface))
-        elif col == 5:  # DELETE
+        elif col == 6:  # DELETE
             s_msg = f"Are you sure to delete Bond '{bond_name}'?"
             self.app.push_screen(ConfirmScreen(s_msg),
                 lambda result: self.handle_delete_result(result, bond_name))
@@ -297,10 +311,13 @@ class BondConfigScreen(ModalScreen[dict]):
             link_aggr = d_iface.get("link-aggregation", {})
             self.bond_ports = link_aggr.get("port", [])
             self.bond_mode = link_aggr.get("mode", "active-backup")
+            profile_name = d_iface.get("profile-name", "")
+            self.is_provider = (profile_name == "provider")
         else:
             self.bond_name = ""
             self.bond_ports = []
             self.bond_mode = "active-backup"
+            self.is_provider = False
         self.bond_mode_list = []
 
     def compose(self) -> ComposeResult:
@@ -323,7 +340,7 @@ class BondConfigScreen(ModalScreen[dict]):
             yield RadioSet(id="mode_list")
         with Horizontal():
             yield Label("Provider Interface?", classes="label-fixed")
-            yield Switch(id="is_provider", value=False)
+            yield Switch(id="is_provider", value=self.is_provider)
         with Horizontal(classes="modal_buttons"):
             yield Button("Save", id="save", variant="primary")
             yield Button("Cancel", id="cancel", variant="error")
@@ -360,16 +377,20 @@ class BondConfigScreen(ModalScreen[dict]):
         if event.button.id == "save":
             name = self.query_one("#bn", Input).value.strip()
             ports = sorted([
-                str(c.label) for c in self.query("#port_container") if c.value
+                str(c.label)
+                for c in self.query("#port_container Checkbox")
+                if c.value
             ])
             rs = self.query_one("#mode_list", RadioSet)
             mode = str(rs.pressed_button.label) if rs.pressed_button else self.bond_mode
+            is_provider = self.query_one("#is_provider").value
 
             if self.is_edit_mode:
                 is_changed = (
                     name != self.bond_name or
                     ports != self.bond_ports or
-                    mode != self.bond_mode
+                    mode != self.bond_mode or
+                    is_provider != self.is_provider
                 )
                 if not is_changed:
                     self.notify(f"No changes for {name}.", severity="info")
@@ -381,9 +402,10 @@ class BondConfigScreen(ModalScreen[dict]):
             if not ports: missing.append("bond ports")
 
             if not missing:
-                self.dismiss(
-                    {"name": name, "ports": ports, "mode": mode}
-                )
+                self.dismiss({
+                    "name": name, "ports": ports, 
+                    "mode": mode, "is_provider": is_provider
+                })
             else:
                 self.notify(f"Missing: {', '.join(missing)}", severity="error")
         else:
@@ -404,7 +426,8 @@ class HostNetwork(VerticalScroll):
                 d_state = nm.create_bond_state(
                     result["name"],
                     result["ports"],
-                    result["mode"]
+                    result["mode"],
+                    result["is_provider"]
                 )
                 am.save_state(f"{result['name']}.yml", d_state)
                 nm.apply_state(d_state)
@@ -425,7 +448,8 @@ class HostNetwork(VerticalScroll):
                     result["id"],
                     result["ip"],
                     result["prefix"],
-                    result["gw"]
+                    result["gw"],
+                    result["profile"],
                 )
                 am.save_state(f"{result['name']}.yml", d_state)
                 nm.apply_state(d_state)

@@ -109,6 +109,7 @@ class NetworkManager:
             
             l_vlan.append((
                 iface.get("name", ""),
+                iface.get("profile-name", ""),
                 vconfig.get("base-iface", ""),
                 str(vconfig.get("id", "")),
                 ip_str,
@@ -122,6 +123,7 @@ class NetworkManager:
             bconfig = iface.get("link-aggregation", {})
             l_bond.append((
                 iface.get("name", ""),
+                iface.get("profile-name", ""),
                 "/".join(bconfig.get("port", [])),
                 bconfig.get("mode", ""),
                 iface.get("state", "")
@@ -149,10 +151,13 @@ class NetworkManager:
             }
         }
 
-    def create_bond_state(self, name: str, ports: List[str],
-            mode: str = "active-backup") -> Dict[str, Any]:
+    def create_bond_state(self,
+                          name: str,
+                          ports: List[str],
+                          mode: str = "active-backup",
+                          is_provider: bool = False) -> Dict[str, Any]:
         interfaces = [{"name": port, "state": "up"} for port in ports]
-        interfaces.append({
+        bond_interface = {
             "name": name,
             "type": "bond",
             "state": "up",
@@ -161,15 +166,24 @@ class NetworkManager:
                 "port": ports,
                 "options": {"miimon": "100"}
             }
-        })
+        }
+        bond_interface["profile-name"] = ""
+        if is_provider:
+            bond_interface["profile-name"] = "provider"
+
+        interfaces.append(bond_interface)
+
         return {"interfaces": interfaces}
 
     def create_vlan_state(self, name: str, base_iface: str, vlan_id: int, 
-            ip: str = "", prefix: int = 24, gw: str = "") -> Dict[str, Any]:
+                          ip: str = "", prefix: int = 24,
+                          gw: str = "", profile: str = "") -> Dict[str, Any]:
         vlan_iface: Dict[str, Any] = {
             "name": name, "type": "vlan", "state": "up",
             "vlan": {"base-iface": base_iface, "id": vlan_id}
         }
+        if profile:
+            vlan_iface["profile-name"] = profile
         if ip:
             vlan_iface["ipv4"] = {
                 "enabled": True,
