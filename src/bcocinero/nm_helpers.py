@@ -167,7 +167,7 @@ class NetworkManager:
                 "options": {"miimon": "100"}
             }
         }
-        bond_interface["profile-name"] = ""
+        bond_interface["profile-name"] = name
         if is_provider:
             bond_interface["profile-name"] = "provider"
 
