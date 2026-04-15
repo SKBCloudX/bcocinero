@@ -42,15 +42,10 @@ Horizontal {
   height: 1fr;
 }
 .dashboard_interface {
-  height: 3fr;
+  height: 4fr;
 }
 .dashboard_installer {
   height: 2fr;
-}
-DataTable {
-  overflow: auto auto;
-  scrollbar-gutter: stable;
-  scrollbar-size: 1 1;
 }
 Input {
   width: auto;
@@ -89,4 +84,8 @@ RadioButton {
   width: 100%;
   height: auto;
   margin-right: 1;
+}
+#list_interface_table {
+  height: 15;
+  min-height: 10;
 }

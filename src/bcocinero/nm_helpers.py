@@ -3,6 +3,7 @@ import subprocess
 import yaml
 import libnmstate
 import configparser
+from enum import Enum
 from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
 
@@ -42,6 +43,26 @@ class ArtifactManager:
             yaml.dump(state, f, default_flow_style=False, allow_unicode=True)
         return target
 
+class ProfileType(Enum):
+    SERVICE = "service"
+    MANAGEMENT = "management"
+    STORAGE = "storage"
+    PROVIDER = "provider"
+    NONE = ""
+
+    @classmethod
+    def list_values(cls, type: str = "all") -> List[str]:
+        l_values = [item.value for item in cls if item != cls.NONE]
+        if type == "vlan":
+            l_values.remove("provider")
+
+        return l_values
+
+class NodeRole(Enum):
+    CONTROL = "control"
+    COMPUTE = "compute"
+    STORAGE = "storage"
+    NONE = ""
 
 class NetworkManager:
     """Class for reading and setting of network interfaces"""
@@ -65,9 +86,22 @@ class NetworkManager:
         """get hostname and nameservers."""
         state = self._show_state()
         dns_resolver = state.get("dns-resolver", {}).get("running", {})
+        role = "N/A"
+        try:
+            result = subprocess.run(
+                ["sudo", "hostnamectl", "deployment"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            role = result.stdout.strip()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+
         return {
             "name": state.get("hostname", {}).get("running", ""),
-            "nameserver": dns_resolver.get("server", [])
+            "nameserver": dns_resolver.get("server", []),
+            "role": role
         }
 
     def get_default_gateway(self) -> Optional[Dict[str, str]]:
@@ -123,7 +157,7 @@ class NetworkManager:
             bconfig = iface.get("link-aggregation", {})
             l_bond.append((
                 iface.get("name", ""),
-                iface.get("profile-name", ""),
+                iface.get("profile-name", "-"),
                 "/".join(bconfig.get("port", [])),
                 bconfig.get("mode", ""),
                 iface.get("state", "")
@@ -139,9 +173,20 @@ class NetworkManager:
             }
         }
 
-    def set_role(self, role: str) -> None:
+    def set_role(self, role: str) -> Tuple[bool, str]:
         """set host role using hostnamectl deployment."""
-        subprocess.run(["sudo", "hostnamectl", "deployment", role], check=True)
+        try:
+            result = subprocess.run(
+                ["sudo", "hostnamectl", "deployment", role],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            return (True, f"Succeed to set the role: {role}")
+        except subprocess.CalledProcessError as e:
+            return (False, str(e))
+        except FileNotFoundError:
+            return (False, "hostnamectl command not found.")
 
     def set_dns_servers(self, servers: List[str]) -> Dict[str, Any]:
         """return nameservers desired state."""

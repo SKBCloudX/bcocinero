@@ -10,7 +10,7 @@ from textual.widget import Widget
 from textual.widgets import Button, Checkbox, DataTable, Input, Label
 from textual.widgets import RadioSet, RadioButton, Select, Switch
 
-from bcocinero.nm_helpers import NetworkManager, ArtifactManager
+from bcocinero.nm_helpers import NetworkManager, ArtifactManager, ProfileType
 
 nm = NetworkManager()
 am = ArtifactManager()

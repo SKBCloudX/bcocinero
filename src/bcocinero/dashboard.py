@@ -4,10 +4,15 @@ from textual.reactive import reactive
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import Button, DataTable, Input, Label
+from textual.widgets import Button, DataTable, Input, Label, Select
 from typing import Optional, Dict, Any, List
 
-from bcocinero.nm_helpers import NetworkManager, ArtifactManager
+from bcocinero.nm_helpers import (
+    NetworkManager,
+    ArtifactManager,
+    ProfileType,
+    NodeRole
+)
 
 nm = NetworkManager()
 am = ArtifactManager()
@@ -16,14 +21,17 @@ class Hostname(Widget):
     host_data = nm.get_host_info()
     hostname = reactive(host_data["name"])
     nameserver = reactive(",".join(host_data["nameserver"]))
+    role = reactive(host_data["role"])
 
     def render(self) -> str:
-        return f"Hostname: {self.hostname} / Nameserver: {self.nameserver}"
+        return f"Hostname: {self.hostname} ({self.role}) / DNS: {self.nameserver}"
 
 class ListInterface(Widget):
     def __init__(self) -> None:
         super().__init__(id="dashboard_interface")
-        self.l_iface_header = ["Name", "Type", "MAC Addr.", "IP Addr./Netmask"]
+        self.l_iface_header = [
+            "Name", "Profile", "Type", "MAC Addr.", "IP Addr./Netmask"
+        ]
         self.l_interface = nm.list_interfaces()
 
     def compose(self) -> ComposeResult:
@@ -48,9 +56,13 @@ class ListInterface(Widget):
             if addresses:
                 addr = addresses[0]
                 s_ip = f"{addr.get('ip')}/{addr.get('prefix-length')}"
-                
+
+            pval = iface.get("profile-name", "")
+            profile = pval if pval in ProfileType.list_values() else "-"
+
             table.add_row(
-                iface.get("name", "N/A"), 
+                iface.get("name", "N/A"),
+                profile,
                 iface.get("type", "N/A"),
                 iface.get("mac-address", "N/A"),
                 s_ip
@@ -63,10 +75,16 @@ class ListInterface(Widget):
         self._add_rows(table)
 
 class HostConfigScreen(ModalScreen[dict]):
-    def __init__(self, s_hostname: str, s_nameserver: str):
+    def __init__(self, s_hostname: str, s_nameserver: str, s_role: str):
         super().__init__()
         self.init_hostname = s_hostname
         self.init_nameserver = s_nameserver
+        self.init_role = s_role
+
+        self.role_options = [
+            (item.name.capitalize(), item.value)
+            for item in NodeRole if item != NodeRole.NONE
+        ]
 
     def compose(self) -> ComposeResult:
         with Vertical(id="modal_container"):
@@ -74,6 +92,10 @@ class HostConfigScreen(ModalScreen[dict]):
             with Horizontal():
                 yield Label("Hostname: ", classes="input_label")
                 yield Input(value=self.init_hostname, id="hn")
+            with Horizontal():
+                yield Label("Role: ", classes="input_label")
+                yield Select(self.role_options, value=self.init_role,
+                        id="role", prompt="Select Role")
             with Horizontal():
                 yield Label("Nameserver: ", classes="input_label")
                 yield Input(value=self.init_nameserver, id="ns")
@@ -85,15 +107,17 @@ class HostConfigScreen(ModalScreen[dict]):
         if event.button.id == "save":
             hn_val = self.query_one("#hn", Input).value.strip()
             ns_val = self.query_one("#ns", Input).value.strip()
-            
-            if not hn_val or not ns_val:
-                self.app.notify("Please enter hostname and nameservers.",
+            role_val = self.query_one("#role", Select).value
+
+            if not hn_val or not ns_val or role_val == Select.NULL:
+                self.app.notify("Enter hostname, nameservers and select role",
                                 severity="error")
                 return
 
             self.dismiss({
                 "hostname": hn_val,
-                "nameserver": ns_val
+                "nameserver": ns_val,
+                "role": role_val
             })
         else:
             self.dismiss(None)
@@ -116,11 +140,13 @@ class Dashboard(VerticalScroll):
             am.save_state("nameserver.yaml", dns_state)
             nm.apply_state(dns_state)
 
+            b_ret, s_msg = nm.set_role(result["role"])
             hostname_widget = self.query_one(Hostname)
             hostname_widget.hostname = result["hostname"]
             hostname_widget.nameserver = result["nameserver"]
+            hostname_widget.role = result["role"]
 
-            self.app.write_status("Configured hostname and name servers.")
+            self.app.write_status("Configured host information.")
         except Exception as e:
             self.app.write_status(f"Failed to configure: {str(e)}")
 
@@ -128,7 +154,11 @@ class Dashboard(VerticalScroll):
         if event.button.id == "host-config":
             h_widget = self.query_one(Hostname)
             self.app.push_screen(
-                HostConfigScreen(h_widget.hostname, h_widget.nameserver),
+                HostConfigScreen(
+                    h_widget.hostname,
+                    h_widget.nameserver,
+                    h_widget.role
+                ),
                 self.save_hostconfig
             )
 
@@ -140,7 +170,7 @@ class Dashboard(VerticalScroll):
                              variant="primary")
             with Horizontal():
                 yield Hostname()
-        with VerticalScroll(classes="dashboard_interface"):
+        with Vertical(classes="dashboard_interface"):
             yield Label("Interfaces", classes="title")
             yield ListInterface()
         with Vertical(classes="dashboard_installer"):
