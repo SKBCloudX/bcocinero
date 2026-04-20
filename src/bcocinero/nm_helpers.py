@@ -24,7 +24,7 @@ class ArtifactManager:
             raise FileNotFoundError(f"Cannot read config: {self.config_path}")
 
         self.config.read(self.config_path, encoding="utf-8")
-        s_config_path: str = self.config.get("DEFAULT", "artifacts_dir", 
+        s_config_path = self.config.get("DEFAULT", "artifacts_dir", 
                                              fallback="").strip()
         
         if not s_config_path:
@@ -70,7 +70,7 @@ class NetworkManager:
     def __init__(self) -> None:
         pass
 
-    def _show_state(self) -> Dict[str, Any]:
+    def show_state(self) -> Dict[str, Any]:
         """show the current network state."""
         return libnmstate.show()
 
@@ -82,9 +82,22 @@ class NetworkManager:
             raise RuntimeError(f"Fail to apply the state: {e}")
 
     # Read operations
+    def get_interface_by_profile(profile_name: str) -> Optional[str]:
+        """get interface by profile-name"""
+        try:
+            state = self.show_state()
+            interfaces = state.get("interfaces", [])
+
+            for iface in interfaces:
+                if iface.get("profile-name", "") == profile_name:
+                    return iface
+            return None
+        except Exception as e:
+            return None
+
     def get_host_info(self) -> Dict[str, Any]:
         """get hostname and nameservers."""
-        state = self._show_state()
+        state = self.show_state()
         dns_resolver = state.get("dns-resolver", {}).get("running", {})
         role = "N/A"
         try:
@@ -105,7 +118,7 @@ class NetworkManager:
         }
 
     def get_default_gateway(self) -> Optional[Dict[str, str]]:
-        state = self._show_state()
+        state = self.show_state()
         routes = state.get("routes", {}).get("running", [])
         for route in routes:
             if route.get("destination") == "0.0.0.0/0":
@@ -117,7 +130,7 @@ class NetworkManager:
 
     def get_interface_info(self, name: str) -> Dict[str, Any]:
         """return the interface info."""
-        state = self._show_state()
+        state = self.show_state()
         return next(
             (iface for iface in state.get("interfaces", [])
                 if iface.get("name") == name), {}
@@ -125,7 +138,7 @@ class NetworkManager:
 
     def list_interfaces(self,
             iface_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        state = self._show_state()
+        state = self.show_state()
         allowed = iface_types or ["ethernet", "bond", "vlan"]
         return [
             iface for iface in state.get("interfaces", [])
