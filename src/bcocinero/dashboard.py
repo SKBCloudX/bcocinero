@@ -79,10 +79,10 @@ class HostConfigScreen(ModalScreen[dict]):
         super().__init__()
         self.init_hostname = s_hostname
         self.init_nameserver = s_nameserver
-        self.init_role = s_role
+        self.init_role = s_role if s_role else NodeRole.HEAD.value
 
         self.role_options = [
-            (item.name.capitalize(), item.value)
+            (item.value, item.value)
             for item in NodeRole if item != NodeRole.NONE
         ]
 

@@ -14,27 +14,14 @@ class ArtifactManager:
     """load config file and set artifacts directory."""
     
     def __init__(self, config_name: str = "config.ini") -> None:
-        self.base_dir: Path = Path(__file__).resolve().parents[2]
-        self.config_path: Path = self.base_dir / config_name
-        self.config: configparser.ConfigParser = configparser.ConfigParser()
+        self.base_dir: Path = Path.home() / ".local/bcocinero"
 
     def get_artifacts_dir(self) -> Path:
         """return artifacts_dir path."""
-        if not self.config_path.exists():
-            raise FileNotFoundError(f"Cannot read config: {self.config_path}")
+        artifact_dir = self.base_dir / "artifacts"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
 
-        self.config.read(self.config_path, encoding="utf-8")
-        s_config_path = self.config.get("DEFAULT", "artifacts_dir", 
-                                             fallback="").strip()
-        
-        if not s_config_path:
-            artifacts_path: Path = self.base_dir / "artifacts"
-        else:
-            artifacts_path = (self.base_dir / s_config_path).resolve()
-       
-        artifacts_path.mkdir(parents=True, exist_ok=True)
-
-        return artifacts_path
+        return artifact_dir
 
     def save_state(self, filename: str, state: Dict[str, Any]) -> Path:
         """save network state to yaml file."""
@@ -59,10 +46,15 @@ class ProfileType(Enum):
         return l_values
 
 class NodeRole(Enum):
-    CONTROL = "control"
-    COMPUTE = "compute"
-    STORAGE = "storage"
+    HEAD = "HeadControl"
+    CONTROL = "Control"
+    COMPUTE = "Compute"
+    STORAGE = "Storage"
     NONE = ""
+
+    @property
+    def is_control_type(self) -> bool:
+        return self in (NodeRole.HEAD, NodeRole.CONTROL)
 
 class NetworkManager:
     """Class for reading and setting of network interfaces"""
