@@ -56,6 +56,10 @@ class NodeRole(Enum):
     def is_control_type(self) -> bool:
         return self in (NodeRole.HEAD, NodeRole.CONTROL)
 
+    @classmethod
+    def has_value(cls, value: str) -> bool:
+      return value in [ item.value for item in cls]
+
 class NetworkManager:
     """Class for reading and setting of network interfaces"""
 
@@ -91,7 +95,7 @@ class NetworkManager:
         """get hostname and nameservers."""
         state = self.show_state()
         dns_resolver = state.get("dns-resolver", {}).get("running", {})
-        role = "N/A"
+        role = ""
         try:
             result = subprocess.run(
                 ["sudo", "hostnamectl", "deployment"],
@@ -99,7 +103,8 @@ class NetworkManager:
                 text=True,
                 check=True
             )
-            role = result.stdout.strip()
+            if NodeRole.has_value(result.stdout.strip()):
+                role = result.stdout.strip()
         except (subprocess.CalledProcessError, FileNotFoundError):
             pass
 
