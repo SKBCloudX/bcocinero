@@ -1,23 +1,23 @@
 import getpass
-import libnmstate
-import os
-import subprocess
-import time
-import signal
-import sys
 import logging
+import os
+import signal
+import subprocess
+import sys
+import time
 from typing import Optional, List, Dict, Any
 
 from bcocinero.nm_helpers import (
-    ArtifactManager,
     NetworkManager,
 )
-
+from . import PROJECT_NAME
 
 TARGET_PROFILE = "management"
 RQLITED_PATH = "/usr/bin/rqlited"
 DATA_DIR = "/var/lib/rqlite"
 CHECK_INTERVAL = 10
+SERVICE_NAME = f"{PROJECT_NAME}.service"
+SERVICE_PATH = f"/etc/systemd/system/{SERVICE_NAME}"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,14 +58,15 @@ class RqliteManager:
             logging.info(f"Change ownership of {self.data_dir} to {self.user}")
         except subprocess.CalledProcessError as e:
             logging.error(f"Failed to change ownership: {e}")
-                
+
     def get_mgmt_ip(self) -> Optional[str]:
         try:
             net_state = nm.show_state()
             interfaces = net_state.get("interfaces", [])
             for iface in interfaces:
                 if iface.get("profile-name", "") == TARGET_PROFILE:
-                    addresses = iface.get("ipv4", {}).get("address", [])
+                    ipv4 = iface.get("ipv4", {})
+                    addresses = ipv4.get("address", [])
                     if addresses:
                         return addresses[0].get("ip")
             return None
@@ -78,7 +79,6 @@ class RqliteManager:
         cmd = [
             RQLITED_PATH,
             "-http-addr", f"{ip}:4001",
-            "-raft-addr", f"{ip}:4002",
             DATA_DIR
         ]
         try:
