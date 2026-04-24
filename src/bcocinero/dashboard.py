@@ -1,10 +1,11 @@
+import ipaddress
 from textual import log
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import Button, DataTable, Input, Label, Select
+from textual.widgets import Button, DataTable, Input, Label, Select, Switch
 from typing import Optional, Dict, Any, List
 
 from bcocinero.nm_helpers import (
@@ -80,7 +81,6 @@ class HostConfigScreen(ModalScreen[dict]):
         self.init_hostname = s_hostname
         self.init_nameserver = s_nameserver
         self.init_role = s_role if s_role else NodeRole.HEAD.value
-
         self.role_options = [
             (item.value, item.value)
             for item in NodeRole if item != NodeRole.NONE
@@ -90,34 +90,60 @@ class HostConfigScreen(ModalScreen[dict]):
         with Vertical(id="modal_container"):
             yield Label("Host Configuration", classes="modal_title")
             with Horizontal():
-                yield Label("Hostname: ", classes="input_label")
+                yield Label("Hostname: ", classes="label-fixed")
                 yield Input(value=self.init_hostname, id="hn")
             with Horizontal():
-                yield Label("Role: ", classes="input_label")
+                yield Label("Role: ", classes="label-fixed")
                 yield Select(self.role_options, value=self.init_role,
                         id="role", prompt="Select Role")
+            with Horizontal(id="hc_ip_container", classes="hidden"):
+                yield Label("Head Control IP", classes="label-fixed")
+                yield Input(placeholder="Enter Head Control IP address", 
+                        id="hc_ip")
             with Horizontal():
-                yield Label("Nameserver: ", classes="input_label")
+                yield Label("Nameserver: ", classes="label-fixed")
                 yield Input(value=self.init_nameserver, id="ns")
             with Horizontal(classes="modal_buttons"):
                 yield Button("Save", id="save", variant="primary")
                 yield Button("Cancel", id="cancel", variant="error")
 
+    def on_mount(self) -> None:
+        self._toggle_ip_input(self.init_role)
+    def on_select_changed(self, event: Select.Changed) -> None:
+        self._toggle_ip_input(event.value)
+    def _toggle_ip_input(self, role_value: str) -> None:
+        container = self.query_one("#hc_ip_container")
+        if role_value == NodeRole.HEAD.value:
+            container.display = False
+        else:
+            container.display = True
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save":
             hn_val = self.query_one("#hn", Input).value.strip()
             ns_val = self.query_one("#ns", Input).value.strip()
             role_val = self.query_one("#role", Select).value
+            hc_ip_val = self.query_one("#hc_ip", Input).value.strip()
 
             if not hn_val or not ns_val or role_val == Select.NULL:
                 self.app.notify("Enter hostname, nameservers and select role",
                                 severity="error")
                 return
+            if role_val != NodeRole.HEAD.value:
+                try:
+                    ipaddress.ip_adress(hc_ip_val)
+                except ValueError:
+                    self.app.notify("Head Control IP is not valid.",
+                                    severity="error")
+                    return
+                except AttributeError:
+                    self.app.notify("Enter Head Control IP.", severity="error")
+                    return
 
             self.dismiss({
                 "hostname": hn_val,
                 "nameserver": ns_val,
-                "role": role_val
+                "role": role_val,
+                "hc_ip": hc_ip_val,
             })
         else:
             self.dismiss(None)
@@ -141,6 +167,7 @@ class Dashboard(VerticalScroll):
             nm.apply_state(dns_state)
 
             b_ret, s_msg = nm.set_role(result["role"])
+            nm.set_head_control_ip(result["hc_ip"])
             hostname_widget = self.query_one(Hostname)
             hostname_widget.hostname = result["hostname"]
             hostname_widget.nameserver = result["nameserver"]

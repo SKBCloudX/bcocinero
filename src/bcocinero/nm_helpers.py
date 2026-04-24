@@ -13,10 +13,11 @@ logging.getLogger('libnmstate').setLevel(logging.ERROR)
 class ArtifactManager:
     """load config file and set artifacts directory."""
     
-    def __init__(self, config_name: str = "config.ini") -> None:
+    def __init__(self) -> None:
         self.base_dir: Path = Path.home() / ".local/bcocinero"
+        self.artifact_dir = get_artifact_dir()
 
-    def get_artifacts_dir(self) -> Path:
+    def get_artifact_dir(self) -> Path:
         """return artifacts_dir path."""
         artifact_dir = self.base_dir / "artifacts"
         artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -25,7 +26,7 @@ class ArtifactManager:
 
     def save_state(self, filename: str, state: Dict[str, Any]) -> Path:
         """save network state to yaml file."""
-        target: Path = self.get_artifacts_dir() / filename
+        target: Path = self.artifact_dir / filename
         with open(target, 'w', encoding='utf-8') as f:
             yaml.dump(state, f, default_flow_style=False, allow_unicode=True)
         return target
@@ -197,6 +198,17 @@ class NetworkManager:
             return (False, str(e))
         except FileNotFoundError:
             return (False, "hostnamectl command not found.")
+
+    def set_head_control_ip(self, hc_ip: str) -> Tuple[bool, str]:
+        am = ArtifactManager()
+        HEFE_FILE: Path = am.artifact_dir / "HEFE"
+        try:
+            with open(HEFE_FILE, "w", encoding="utf-8") as f:
+                f.write(hc_ip)
+
+            return (True, f"Succeed to save the Head Control IP.")
+        except OSError as e:
+            return (False, f"Fail to save the Head Control IP: {e.strerror}"
 
     def set_dns_servers(self, servers: List[str]) -> Dict[str, Any]:
         """return nameservers desired state."""

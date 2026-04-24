@@ -89,3 +89,9 @@ RadioButton {
   height: 15;
   min-height: 10;
 }
+#hc_ip_container {
+  display: none;
+}
+#hc_ip_container.show {
+  display: block;
+}
