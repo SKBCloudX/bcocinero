@@ -76,11 +76,16 @@ class ListInterface(Widget):
         self._add_rows(table)
 
 class HostConfigScreen(ModalScreen[dict]):
-    def __init__(self, s_hostname: str, s_nameserver: str, s_role: str):
+    def __init__(self,
+                 s_hostname: str,
+                 s_nameserver: str,
+                 s_role: str,
+                 s_hc_ip: str):
         super().__init__()
         self.init_hostname = s_hostname
         self.init_nameserver = s_nameserver
         self.init_role = s_role if s_role else NodeRole.HEAD.value
+        self.init_hc_ip = s_hc_ip
         self.role_options = [
             (item.value, item.value)
             for item in NodeRole if item != NodeRole.NONE
@@ -99,7 +104,7 @@ class HostConfigScreen(ModalScreen[dict]):
             with Horizontal(id="hc_ip_container", classes="hidden"):
                 yield Label("Head Control IP", classes="label-fixed")
                 yield Input(placeholder="Enter Head Control IP address", 
-                        id="hc_ip")
+                        id="hc_ip", value=self.init_hc_ip)
             with Horizontal():
                 yield Label("Nameserver: ", classes="label-fixed")
                 yield Input(value=self.init_nameserver, id="ns")
@@ -109,14 +114,17 @@ class HostConfigScreen(ModalScreen[dict]):
 
     def on_mount(self) -> None:
         self._toggle_ip_input(self.init_role)
+
     def on_select_changed(self, event: Select.Changed) -> None:
         self._toggle_ip_input(event.value)
+
     def _toggle_ip_input(self, role_value: str) -> None:
         container = self.query_one("#hc_ip_container")
         if role_value == NodeRole.HEAD.value:
             container.display = False
         else:
             container.display = True
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save":
             hn_val = self.query_one("#hn", Input).value.strip()
@@ -130,13 +138,14 @@ class HostConfigScreen(ModalScreen[dict]):
                 return
             if role_val != NodeRole.HEAD.value:
                 try:
-                    ipaddress.ip_adress(hc_ip_val)
+                    ipaddress.ip_address(hc_ip_val)
                 except ValueError:
                     self.app.notify("Head Control IP is not valid.",
                                     severity="error")
                     return
                 except AttributeError:
-                    self.app.notify("Enter Head Control IP.", severity="error")
+                    self.app.notify(f"Enter Head Control IP: {hc_ip_val}",
+                                    severity="error")
                     return
 
             self.dismiss({
@@ -167,7 +176,15 @@ class Dashboard(VerticalScroll):
             nm.apply_state(dns_state)
 
             b_ret, s_msg = nm.set_role(result["role"])
-            nm.set_head_control_ip(result["hc_ip"])
+            if not b_ret:
+                self.app.write_status(s_msg)
+                return
+
+            b_ret, s_msg = nm.set_head_control_ip(result["hc_ip"])
+            if not b_ret:
+                self.app.write_status(s_msg)
+                return
+
             hostname_widget = self.query_one(Hostname)
             hostname_widget.hostname = result["hostname"]
             hostname_widget.nameserver = result["nameserver"]
@@ -180,11 +197,13 @@ class Dashboard(VerticalScroll):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "host-config":
             h_widget = self.query_one(Hostname)
+            hdata = nm.get_host_info()
             self.app.push_screen(
                 HostConfigScreen(
                     h_widget.hostname,
                     h_widget.nameserver,
-                    h_widget.role
+                    h_widget.role,
+                    hdata["hc_ip"]
                 ),
                 self.save_hostconfig
             )

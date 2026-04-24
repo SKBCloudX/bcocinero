@@ -15,7 +15,7 @@ class ArtifactManager:
     
     def __init__(self) -> None:
         self.base_dir: Path = Path.home() / ".local/bcocinero"
-        self.artifact_dir = get_artifact_dir()
+        self.artifact_dir = self.get_artifact_dir()
 
     def get_artifact_dir(self) -> Path:
         """return artifacts_dir path."""
@@ -97,6 +97,8 @@ class NetworkManager:
         state = self.show_state()
         dns_resolver = state.get("dns-resolver", {}).get("running", {})
         role = ""
+        hc_ip = ""
+
         try:
             result = subprocess.run(
                 ["sudo", "hostnamectl", "deployment"],
@@ -109,10 +111,21 @@ class NetworkManager:
         except (subprocess.CalledProcessError, FileNotFoundError):
             pass
 
+        am = ArtifactManager()
+        HEFE_FILE: Path = am.artifact_dir / "HEFE"
+        if HEFE_FILE.exists():
+            try:
+                content = HEFE_FILE.read_text(encoding="utf-8").strip()
+                if content:
+                    hc_ip = content
+            except OSError:
+                pass
+
         return {
             "name": state.get("hostname", {}).get("running", ""),
             "nameserver": dns_resolver.get("server", []),
-            "role": role
+            "role": role,
+            "hc_ip": hc_ip
         }
 
     def get_default_gateway(self) -> Optional[Dict[str, str]]:
@@ -208,7 +221,7 @@ class NetworkManager:
 
             return (True, f"Succeed to save the Head Control IP.")
         except OSError as e:
-            return (False, f"Fail to save the Head Control IP: {e.strerror}"
+            return (False, f"Fail to save the Head Control IP: {e.strerror}")
 
     def set_dns_servers(self, servers: List[str]) -> Dict[str, Any]:
         """return nameservers desired state."""
