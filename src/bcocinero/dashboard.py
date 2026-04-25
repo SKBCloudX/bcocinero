@@ -158,6 +158,10 @@ class HostConfigScreen(ModalScreen[dict]):
             self.dismiss(None)
 
 class Dashboard(VerticalScroll):
+    def log(self, msg, level="INFO"):
+        if self.app:
+            self.app.post_log(msg, level)
+
     def save_hostconfig(self, result: Optional[Dict[str, str]]) -> None:
         if not result:
             return
@@ -178,21 +182,26 @@ class Dashboard(VerticalScroll):
             b_ret, s_msg = nm.set_role(result["role"])
             if not b_ret:
                 self.app.write_status(s_msg)
+                self.log(s_msg, "ERROR")
                 return
 
-            b_ret, s_msg = nm.set_head_control_ip(result["hc_ip"])
-            if not b_ret:
-                self.app.write_status(s_msg)
-                return
+            if result["hc_ip"]:
+                b_ret, s_msg = nm.set_head_control_ip(result["hc_ip"])
+                if not b_ret:
+                    self.app.write_status(s_msg)
+                    self.log(s_msg, "ERROR")
+                    return
 
             hostname_widget = self.query_one(Hostname)
             hostname_widget.hostname = result["hostname"]
             hostname_widget.nameserver = result["nameserver"]
             hostname_widget.role = result["role"]
 
-            self.app.write_status("Configured host information.")
+            self.app.write_status("Configured host information")
+            self.log(f"Configured host information: {result['hostname']}")
         except Exception as e:
             self.app.write_status(f"Failed to configure: {str(e)}")
+            self.log(f"Failed to configure: {str(e)}", "ERROR")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "host-config":

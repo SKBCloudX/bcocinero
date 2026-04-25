@@ -43,9 +43,10 @@ Horizontal {
 }
 .dashboard_interface {
   height: 4fr;
+  overflow-y: auto;
 }
 .dashboard_installer {
-  height: 2fr;
+  height: 1fr;
 }
 Input {
   width: auto;
@@ -94,4 +95,11 @@ RadioButton {
 }
 #hc_ip_container.show {
   display: block;
+}
+#main_log {
+  dock: bottom;
+  height: 5;
+  background: $surface;
+  border-top: tall $accent;
+  color: $text;
 }

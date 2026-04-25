@@ -5,7 +5,7 @@ from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widget import Widget
-from textual.widgets import Footer, Header, TabbedContent, TabPane
+from textual.widgets import Footer, Header, TabbedContent, TabPane, RichLog
 from bcocinero.dashboard import Dashboard
 from bcocinero.hostnetwork import HostNetwork
 from bcocinero.installer import Installer
@@ -39,6 +39,8 @@ class BcocineroScreen(Screen):
                 yield HostNetwork()
             with TabPane("[red][b]I[/b][/red]nstaller", id="installer"):
                 yield Installer()
+        yield RichLog(id="main_log", auto_scroll=True, markup=True,
+                      highlight=True)
         yield StatusBar(id="main_status_bar")
         #yield self.footer
 
@@ -48,11 +50,25 @@ class BcocineroScreen(Screen):
 class Bcocinero(App):
     """Burrito Chef"""
 
+    LEVEL_COLORS = {
+        "INFO": "green",
+        "WARN": "yellow",
+        "ERROR": "red",
+    }
+    def post_log(self, msg: str, level: str = "INFO") -> None:
+        try:
+            log_widget = self.screen.query_one("#main_log", RichLog)
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            color = self.LEVEL_COLORS.get(level, "green")
+            log_widget.write(f"[{timestamp}]|[[bold {color}]{level}[/]]|{msg}")
+        except NoMatches:
+            pass
+
     def write_status(self, msg: str) -> None:
         try:
             self.screen.query_one("#main_status_bar").message = msg
         except NoMatches:
-            self.log("Cannot find #main_status_bar widget")
+            pass
 
     def refresh_dashboard_interface_table(self):
         try:

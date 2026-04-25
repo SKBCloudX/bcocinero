@@ -206,6 +206,10 @@ class NetworkManager:
                 capture_output=True,
                 text=True
             )
+            if role == NodeRole.HEAD.value:
+                from bhefe.main import RqliteManager
+                rqm = RqliteManager()
+                rqm.ensure_systemd_service()
             return (True, f"Succeed to set the role: {role}")
         except subprocess.CalledProcessError as e:
             return (False, str(e))

@@ -33,7 +33,55 @@ class RqliteManager:
         self.process = None
         self.current_ip = None
         self.user = getpass.getuser()
+        self.bhefe_bin = f"/home/{self.user}/.local/bin/{PROJECT_NAME}"
         self.check_data_dir()
+
+    def ensure_systemd_service(self) -> None:
+        service_str = f"""[Unit]
+Description=bhefe (rqlited controller)
+After=network-online.target
+
+[Service]
+Type=simple
+User={self.user}
+Group={self.user}
+WorkingDirectory=/home/{self.user}
+Environment=PYTHONPATH=/usr/lib64/python3.9/site-packages:/usr/lib/python3.9/site-packages
+ExecStart={self.bhefe_bin}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+""".strip()
+        b_content_match = False
+        b_file_exists = os.path.exists(SERVICE_PATH)
+
+        if b_file_exists:
+            try:
+                with open(SERVICE_PATH, 'r') as f:
+                    b_content_match = (f.read().strip() == service_str)
+            except Exception as e:
+                logging.error(f"Fail to read service file: {e}")
+
+        if not b_content_match:
+            try:
+                cmd = ["sudo", "tee", SERVICE_PATH]
+                subprocess.run(cmd, input=service_str, text=True, 
+                               check=True, stdout=subprocess.DEVNULL)
+                logging.info(f"Systemd service {SERVICE_PATH} is updated.")
+    
+                subprocess.run(
+                    ["sudo", "systemctl", "daemon-reload"],
+                    check=True
+                )
+                subprocess.run(
+                    ["sudo", "systemctl", "restart", SERVICE_NAME],
+                    check=True
+                )
+                logging.info(f"Succeed to start {SERVICE_NAME}")
+            except subprocess.CalledProcessError as e:
+                logging.error(f"Fail to set up systemd service: {e}")
 
     def check_data_dir(self) -> None:
         # create data dir if not exist.
