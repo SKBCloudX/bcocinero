@@ -15,6 +15,7 @@ class ArtifactManager:
     
     def __init__(self) -> None:
         self.base_dir: Path = Path.home() / ".local/bcocinero"
+        self.jefe_file: Path = self.base_dir / "JEFE"
         self.artifact_dir = self.get_artifact_dir()
 
     def get_artifact_dir(self) -> Path:
@@ -65,7 +66,7 @@ class NetworkManager:
     """Class for reading and setting of network interfaces"""
 
     def __init__(self) -> None:
-        pass
+        self.am = ArtifactManager()
 
     def show_state(self) -> Dict[str, Any]:
         """show the current network state."""
@@ -79,7 +80,14 @@ class NetworkManager:
             raise RuntimeError(f"Fail to apply the state: {e}")
 
     # Read operations
-    def get_interface_by_profile(profile_name: str) -> Optional[str]:
+    def get_machine_id(self) -> Optional[str]:
+        try:
+            with open("/etc/machine-id", "r") as f:
+                return f.read().strip()
+        except FileNotFoundError:
+            return None
+
+    def get_interface_by_profile(self, profile_name: str) -> Optional[str]:
         """get interface by profile-name"""
         try:
             state = self.show_state()
@@ -92,12 +100,27 @@ class NetworkManager:
         except Exception as e:
             return None
 
+    def get_mgmt_ip(self) -> Optional[str]:
+        iface = self.get_interface_by_profile(ProfileType.MANAGEMENT.value)
+        my_mgmt_ip = None
+
+        if iface:
+            ipv4_info = iface.get("ipv4", {})
+            addresses = ipv4_info.get("address", [])
+
+            if addresses:
+                my_mgmt_ip = addresses[0].get("ip")
+
+        return my_mgmt_ip
+
     def get_host_info(self) -> Dict[str, Any]:
         """get hostname and nameservers."""
         state = self.show_state()
         dns_resolver = state.get("dns-resolver", {}).get("running", {})
         role = ""
-        hc_ip = ""
+        hc_ip = None
+        mgmt_ip = self.get_mgmt_ip()
+        machine_id = self.get_machine_id()
 
         try:
             result = subprocess.run(
@@ -111,21 +134,21 @@ class NetworkManager:
         except (subprocess.CalledProcessError, FileNotFoundError):
             pass
 
-        am = ArtifactManager()
-        HEFE_FILE: Path = am.artifact_dir / "HEFE"
-        if HEFE_FILE.exists():
+        if self.am.jefe_file.exists():
             try:
-                content = HEFE_FILE.read_text(encoding="utf-8").strip()
+                content = self.am.jefe_file.read_text(encoding="utf-8").strip()
                 if content:
                     hc_ip = content
             except OSError:
                 pass
 
         return {
-            "name": state.get("hostname", {}).get("running", ""),
-            "nameserver": dns_resolver.get("server", []),
+            "machine_id": machine_id,
+            "hostname": state.get("hostname", {}).get("running", ""),
+            "nameservers": dns_resolver.get("server", []),
             "role": role,
-            "hc_ip": hc_ip
+            "hc_ip": hc_ip,
+            "mgmt_ip": mgmt_ip
         }
 
     def get_default_gateway(self) -> Optional[Dict[str, str]]:
@@ -207,9 +230,13 @@ class NetworkManager:
                 text=True
             )
             if role == NodeRole.HEAD.value:
-                from bhefe.main import RqliteManager
-                rqm = RqliteManager()
-                rqm.ensure_systemd_service()
+                from bjefe.main import BjefeDaemon
+                bjd = BjefeDaemon()
+                bjd.setup_systemd_service()
+            else:
+                from bcocinerod.main import BcocineroDaemon
+                bcd = BcocineroDaemon()
+                bcd.setup_systemd_service()
             return (True, f"Succeed to set the role: {role}")
         except subprocess.CalledProcessError as e:
             return (False, str(e))
@@ -217,10 +244,8 @@ class NetworkManager:
             return (False, "hostnamectl command not found.")
 
     def set_head_control_ip(self, hc_ip: str) -> Tuple[bool, str]:
-        am = ArtifactManager()
-        HEFE_FILE: Path = am.artifact_dir / "HEFE"
         try:
-            with open(HEFE_FILE, "w", encoding="utf-8") as f:
+            with open(self.am.jefe_file, "w", encoding="utf-8") as f:
                 f.write(hc_ip)
 
             return (True, f"Succeed to save the Head Control IP.")

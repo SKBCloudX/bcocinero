@@ -20,8 +20,8 @@ am = ArtifactManager()
 
 class Hostname(Widget):
     host_data = nm.get_host_info()
-    hostname = reactive(host_data["name"])
-    nameserver = reactive(",".join(host_data["nameserver"]))
+    hostname = reactive(host_data["hostname"])
+    nameserver = reactive(",".join(host_data["nameservers"]))
     role = reactive(host_data["role"])
 
     def render(self) -> str:

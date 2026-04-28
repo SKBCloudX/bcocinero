@@ -1,23 +1,22 @@
 import getpass
 import logging
 import os
+import requests
 import signal
 import subprocess
 import sys
 import time
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 
-from bcocinero.nm_helpers import (
-    NetworkManager,
-)
+from bcocinero.db import BcocineroDB
+from bcocinero.nm_helpers import NetworkManager
+from bcocinero.systemd_service import ensure_systemd_service
 from . import PROJECT_NAME
 
 TARGET_PROFILE = "management"
 RQLITED_PATH = "/usr/bin/rqlited"
 DATA_DIR = "/var/lib/rqlite"
 CHECK_INTERVAL = 10
-SERVICE_NAME = f"{PROJECT_NAME}.service"
-SERVICE_PATH = f"/etc/systemd/system/{SERVICE_NAME}"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,62 +25,29 @@ logging.basicConfig(
 
 nm = NetworkManager()
 
-class RqliteManager:
-    def __init__(self) -> None:
+class BjefeDaemon:
+    def __init__(self):
         self.data_dir = DATA_DIR
         self.target_profile = TARGET_PROFILE
         self.process = None
         self.current_ip = None
         self.user = getpass.getuser()
-        self.bhefe_bin = f"/home/{self.user}/.local/bin/{PROJECT_NAME}"
+        self.bin_path = f"/home/{self.user}/.local/bin/{PROJECT_NAME}"
         self.check_data_dir()
 
-    def ensure_systemd_service(self) -> None:
-        service_str = f"""[Unit]
-Description=bhefe (rqlited controller)
-After=network-online.target
-
-[Service]
-Type=simple
-User={self.user}
-Group={self.user}
-WorkingDirectory=/home/{self.user}
-Environment=PYTHONPATH=/usr/lib64/python3.9/site-packages:/usr/lib/python3.9/site-packages
-ExecStart={self.bhefe_bin}
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-""".strip()
-        b_content_match = False
-        b_file_exists = os.path.exists(SERVICE_PATH)
-
-        if b_file_exists:
-            try:
-                with open(SERVICE_PATH, 'r') as f:
-                    b_content_match = (f.read().strip() == service_str)
-            except Exception as e:
-                logging.error(f"Fail to read service file: {e}")
-
-        if not b_content_match:
-            try:
-                cmd = ["sudo", "tee", SERVICE_PATH]
-                subprocess.run(cmd, input=service_str, text=True, 
-                               check=True, stdout=subprocess.DEVNULL)
-                logging.info(f"Systemd service {SERVICE_PATH} is updated.")
-    
-                subprocess.run(
-                    ["sudo", "systemctl", "daemon-reload"],
-                    check=True
-                )
-                subprocess.run(
-                    ["sudo", "systemctl", "restart", SERVICE_NAME],
-                    check=True
-                )
-                logging.info(f"Succeed to start {SERVICE_NAME}")
-            except subprocess.CalledProcessError as e:
-                logging.error(f"Fail to set up systemd service: {e}")
+    def setup_systemd_service(self) -> None:
+        l_pkg_dirs = [
+            "/usr/lib64/python3.9/site-packages", 
+            "/usr/lib/python3.9/site-packages"
+        ]
+        d_env = {"PYTHONPATH": ":".join(l_pkg_dirs)}
+        ensure_systemd_service(
+            service_name=PROJECT_NAME,
+            description=f"{PROJECT_NAME} service - rqlited controller",
+            exec_start=self.bin_path,
+            user=self.user,
+            env_vars=d_env
+        )
 
     def check_data_dir(self) -> None:
         # create data dir if not exist.
@@ -107,26 +73,13 @@ WantedBy=multi-user.target
         except subprocess.CalledProcessError as e:
             logging.error(f"Failed to change ownership: {e}")
 
-    def get_mgmt_ip(self) -> Optional[str]:
-        try:
-            net_state = nm.show_state()
-            interfaces = net_state.get("interfaces", [])
-            for iface in interfaces:
-                if iface.get("profile-name", "") == TARGET_PROFILE:
-                    ipv4 = iface.get("ipv4", {})
-                    addresses = ipv4.get("address", [])
-                    if addresses:
-                        return addresses[0].get("ip")
-            return None
-        except Exception as e:
-            logging.error(f"Network lookup failed: {e}")
-            return None
-
     def start_rqlited(self, ip: str) -> None:
         logging.info(f"Detected IP {ip}. Launching rqlited...")
         cmd = [
             RQLITED_PATH,
             "-http-addr", f"{ip}:4001",
+            "-raft-addr", f"{ip}:4002",
+            "-fk",
             DATA_DIR
         ]
         try:
@@ -134,6 +87,26 @@ WantedBy=multi-user.target
             self.current_ip = ip
         except Exception as e:
             logging.error(f"Failed to start rqlited: {e}")
+
+    def wait_rqlited(self,
+                     ip: str = "127.0.0.1",
+                     port: int = 4001,
+                     timeout: int = 5):
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                res = requests.get(f"http://{ip}:{port}/status", timeout=2)
+                if res.status_code == 200:
+                    status_data = res.json()
+                    store_data = status_data.get("store", {})
+                    if store_data.get("ready") is True:
+                        logging.info("rqlited is open and ready.")
+                        return True
+            except Exception:
+                pass
+            time.sleep(1)
+
+        return False
 
     def stop_rqlited(self) -> None:
         if self.process:
@@ -147,15 +120,28 @@ WantedBy=multi-user.target
             self.current_ip = None
 
     def run(self) -> None:
-        logging.info("Starting rqlite controller.")
-        logging.info(f"Monitoring profile: {TARGET_PROFILE}")
+        logging.info(f"Starting {PROJECT_NAME} (rqlited controller)...")
+        logging.info(f"Monitoring profile: {self.target_profile}")
         while True:
-            new_ip = self.get_mgmt_ip()
+            hostinfo = nm.get_host_info()
+            new_ip = hostinfo.get("mgmt_ip")
 
             if new_ip and new_ip != self.current_ip:
                 if self.current_ip:
                     self.stop_rqlited()
                 self.start_rqlited(new_ip)
+                if self.wait_rqlited(new_ip):
+                    try:
+                        db = BcocineroDB(urls=[f"{new_ip}:4001"])
+                        db.initialize_schema()
+                        logging.info("DB schema is initialized.")
+                        # update hosts table
+                        db.upsert_host(**hostinfo)
+                    except Exception as e:
+                        logging.error(f"Fail to initialize DB: {e}")
+                else:
+                    s_msg = f"rqlited port on {new_ip} not open in time."
+                    logging.error(s_msg)
             elif not new_ip and self.current_ip:
                 logging.warning("Management IP lost. Shutting down rqlited.")
                 self.stop_rqlited()
@@ -163,16 +149,16 @@ WantedBy=multi-user.target
             time.sleep(CHECK_INTERVAL)
 
 def main():
-    manager = RqliteManager()
+    daemon = BjefeDaemon()
 
     def handle_exit(signum, frame):
-        manager.stop_rqlited()
+        daemon.stop_rqlited()
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, handle_exit)
     signal.signal(signal.SIGINT, handle_exit)
 
-    manager.run()
+    daemon.run()
 
 if __name__ == "__main__":
     main()
