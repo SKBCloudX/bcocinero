@@ -33,6 +33,7 @@ class BjefeDaemon:
         self.current_ip = None
         self.user = getpass.getuser()
         self.bin_path = f"/home/{self.user}/.local/bin/{PROJECT_NAME}"
+        self.is_db_initialized = False
         self.check_data_dir()
 
     def setup_systemd_service(self) -> None:
@@ -131,14 +132,19 @@ class BjefeDaemon:
                     self.stop_rqlited()
                 self.start_rqlited(new_ip)
                 if self.wait_rqlited(new_ip):
+                    db = BcocineroDB(urls=[f"{new_ip}:4001"])
+                    if not self.is_db_initialized:
+                        try:
+                            self.is_db_initialized = db.initialize_schema()
+                            logging.info("DB schema is initialized.")
+                        except Exception as e:
+                            logging.error(f"Fail to initialize DB: {e}")
                     try:
-                        db = BcocineroDB(urls=[f"{new_ip}:4001"])
-                        db.initialize_schema()
-                        logging.info("DB schema is initialized.")
                         # update hosts table
                         db.upsert_host(**hostinfo)
+                        logging.error(f"Succeed to update hosts DB.")
                     except Exception as e:
-                        logging.error(f"Fail to initialize DB: {e}")
+                        logging.error(f"Fail to update hosts DB: {e}")
                 else:
                     s_msg = f"rqlited port on {new_ip} not open in time."
                     logging.error(s_msg)

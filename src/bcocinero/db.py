@@ -9,7 +9,7 @@ class BcocineroDB:
         self.conn = rqdb.connect(urls)
         self.cursor = self.conn.cursor()
 
-    def initialize_schema(self) -> None:
+    def initialize_schema(self) -> bool:
         logging.info("Initializing rqlite schema...")
         schemas = [
         """CREATE TABLE IF NOT EXISTS hosts (
@@ -45,8 +45,10 @@ class BcocineroDB:
             for s in schemas:
                 self.cursor.execute(s)
             logging.info("Schema initialization is succeeded.")
+            return True
         except Exception as e:
             logging.error(f"Schema initializationis failed: {e}")
+            return False
 
     def upsert_host(self, **kwargs) -> None:
         sql = """
