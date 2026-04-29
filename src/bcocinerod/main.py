@@ -12,6 +12,7 @@ from bcocinero.nm_helpers import (
     NetworkManager,
     ArtifactManager,
 )
+from bcocinero.systemd_service import ensure_systemd_service
 from . import PROJECT_NAME
 
 logging.basicConfig(
@@ -28,17 +29,18 @@ class BcocineroDaemon:
     def __init__(self):
         self.user = getpass.getuser()
         self.bin_path = f"/home/{self.user}/.local/bin/{PROJECT_NAME}"
+        self.hc_ip = None
 
-    def _check_for_db(self, hc_ip: str) -> bool:
+    def _check_for_db(self) -> bool:
         msg = f"Check for connection to Head Node DB ({self.hc_ip}:4001)..."
         logging.info(msg)
 
         try:
-            with socket.create_connection((hc_ip, 4001), timeout=2):
+            with socket.create_connection((self.hc_ip, 4001), timeout=2):
                 logging.info("Connected to Head Node DB port successfully.")
                 return True
         except (socket.timeout, ConnectionRefusedError, OSError):
-            msg = "DB not reachable (Target: {hc_ip})"
+            msg = "DB not reachable (Target: {self.hc_ip})"
             logging.warning(msg)
 
         return False
@@ -61,16 +63,16 @@ class BcocineroDaemon:
         try:
             hostinfo = nm.get_host_info()
             # if hc_ip does not exist, return
-            hc_ip = hostinfo.get("hc_ip")
-            if not hc_ip:
+            self.hc_ip = hostinfo.get("hc_ip", None)
+            if not self.hc_ip:
                 msg = "Head control node is not registered. Skipping report."
                 logging.warning(msg)
                 return
 
-            if not self._check_for_db(hc_ip):
+            if not self._check_for_db():
                 return
 
-            db = BcocineroDB(urls=[f"{hc_ip}:4001"])
+            db = BcocineroDB(urls=[f"{self.hc_ip}:4001"])
             db.upsert_host(**hostinfo)
 
             interfaces = nm.list_interfaces(iface_types=["bond", "vlan"])
@@ -78,11 +80,14 @@ class BcocineroDaemon:
                 iface["machine_id"] = hostinfo.get("machine_id")
 
                 if iface.get("type") == "bond":
-                    self.db.upsert_bond(**iface)
+                    db.upsert_bond(**iface)
                 elif iface.get("type") == "vlan":
-                    self.db.upsert_vlan(**iface)
+                    db.upsert_vlan(**iface)
 
-            msg = f"Reported {d_hostinfo['hostname']} info to {hc_ip}."
+            msg = (
+                f"Reported {hostinfo['hostname']} info to "
+                f"Head Control Node ({self.hc_ip})."
+            )
             logging.info(msg)
         except Exception as e:
             logging.error(f"Fail to collect interface information: {e}")

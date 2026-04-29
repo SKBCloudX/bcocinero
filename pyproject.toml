@@ -26,7 +26,7 @@ bcocinerod = "bcocinerod.main:main"
 bjefe = "bjefe.main:main"
 
 [build-system]
-requires = ["uv_build>=0.10.12,<0.11.0"]
+requires = ["uv_build>=0.10.12,<=0.11.7"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
