@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional
 from bcocinero.db import BcocineroDB
 from bcocinero.nm_helpers import NetworkManager
 from bcocinero.systemd_service import ensure_systemd_service
+from bcocinero.hosts import update_etc_hosts
+
 from . import PROJECT_NAME
 
 TARGET_PROFILE = "management"
@@ -151,6 +153,15 @@ class BjefeDaemon:
             elif not new_ip and self.current_ip:
                 logging.warning("Management IP lost. Shutting down rqlited.")
                 self.stop_rqlited()
+
+            if self.current_ip:
+                try:
+                    db = BcocineroDB(urls=[f"{self.current_ip}:4001"])
+                    db.upsert_host(**hostinfo)
+                    all_hosts = db.get_all_hosts()
+                    update_etc_hosts(all_hosts)
+                except Exception as e:
+                    logging.error(f"Fail to sync hosts info: {e}")
 
             time.sleep(CHECK_INTERVAL)
 

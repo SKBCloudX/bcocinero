@@ -100,18 +100,20 @@ class NetworkManager:
         except Exception as e:
             return None
 
-    def get_mgmt_ip(self) -> Optional[str]:
-        iface = self.get_interface_by_profile(ProfileType.MANAGEMENT.value)
+    def get_mgmt_iface_info(self) -> Tuple[Optional[str], Optional[str]]:
         my_mgmt_ip = None
+        my_mgmt_name = None
+        iface = self.get_interface_by_profile(ProfileType.MANAGEMENT.value)
 
         if iface:
+            my_mgmt_name = iface.get("name")
             ipv4_info = iface.get("ipv4", {})
             addresses = ipv4_info.get("address", [])
 
             if addresses:
                 my_mgmt_ip = addresses[0].get("ip")
 
-        return my_mgmt_ip
+        return my_mgmt_ip, my_mgmt_name
 
     def get_host_info(self) -> Dict[str, Any]:
         """get hostname and nameservers."""
@@ -119,7 +121,7 @@ class NetworkManager:
         dns_resolver = state.get("dns-resolver", {}).get("running", {})
         role = ""
         hc_ip = None
-        mgmt_ip = self.get_mgmt_ip()
+        mgmt_ip, mgmt_name = self.get_mgmt_iface_info()
         machine_id = self.get_machine_id()
 
         try:
@@ -148,7 +150,8 @@ class NetworkManager:
             "nameservers": dns_resolver.get("server", []),
             "role": role,
             "hc_ip": hc_ip,
-            "mgmt_ip": mgmt_ip
+            "mgmt_ip": mgmt_ip,
+            "mgmt_name": mgmt_name
         }
 
     def get_default_gateway(self) -> Optional[Dict[str, str]]:

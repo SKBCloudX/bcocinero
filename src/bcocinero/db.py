@@ -50,6 +50,18 @@ class BcocineroDB:
             logging.error(f"Schema initializationis failed: {e}")
             return False
 
+    def get_all_hosts(self) -> List:
+        sql = "SELECT hostname, mgmt_ip, role FROM hosts"
+        try:
+            r = self.cursor.execute(sql)
+            return [
+                {"hostname": item[0], "mgmt_ip": item[1], "role": item[2]}
+                for item in r.results
+            ]
+        except Exception as e:
+            logging.error(f"Failed to query all hosts: {e}")
+            return []
+
     def upsert_host(self, **kwargs) -> None:
         sql = """
         INSERT INTO hosts 
