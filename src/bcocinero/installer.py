@@ -1,15 +1,21 @@
+import logging
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.widget import Widget
 from textual.widgets import Button, DataTable, Label
 
-from bcocinero.nm_helpers import NetworkManager
+from bcocinero.nm_helpers import NetworkManager, InventoryGenerator
 from bcocinero.db import BcocineroDB
 
 nm = NetworkManager()
 
 class ListHost(Widget):
     l_host_header = ["Name", "IP", "Role", "State"]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.db_hostdata = []
+        self.logger = logging.getLogger("bcocinero")
 
     def compose(self) -> ComposeResult:
         yield DataTable(id="host_table", zebra_stripes=True, fixed_rows=1)
@@ -27,20 +33,35 @@ class ListHost(Widget):
         if not ip:
             return
         db = BcocineroDB(urls=[f"{ip}:4001"])
-        data = db.get_all_hosts()
-        l_host_data = [tuple(d.values()) for d in data]
+        self.db_hostdata = db.get_all_hosts()
+        l_host_data = [tuple(d.values()) for d in self.db_hostdata]
         for row in l_host_data:
             table.add_row(*row)
 
+    def create_inventory(self) -> None:
+        if not self.db_hostdata:
+            self.logger.error("No host data available to create inventory.")
+            return
+
+        gen = InventoryGenerator(self.db_hostdata)
+        gen.generate("/tmp/hosts")
+        self.logger.info(f"Created an inventory file: hosts")
+
+
 class Installer(VerticalScroll):
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "hosts-refresh":
             self.query_one(ListHost).refresh_table()
+        if event.button.id == "create-inventory":
+            self.query_one(ListHost).create_inventory()
 
     def compose(self) -> ComposeResult:
         with Horizontal():
             yield Label("Hosts", classes="title")
             yield Button(label="Refresh", id="hosts-refresh",
+                         variant="primary")
+            yield Button(label="Create Inventory", id="create-inventory",
                          variant="primary")
         yield ListHost(id="host_list_widget")
 

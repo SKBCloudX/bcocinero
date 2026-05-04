@@ -1,4 +1,5 @@
 import ipaddress
+import logging
 from typing import Optional, Dict, Any, List, Tuple
 from textual import log
 from textual.app import App, ComposeResult
@@ -292,9 +293,10 @@ class ListBond(Widget):
                     list_vlan_widget.refresh_table()
                 except Exception:
                     pass
-                self.app.write_status(f"{bond_name} is deleted.")
+                logging.info(f"{bond_name} is deleted.")
             except Exception as e:
-                self.app.write_status(f"Failed to delete: {e}")
+                logging.error(f"Fail to delete: {e}")
+
 
 class BondConfigScreen(ModalScreen[dict]):
     MODES = [
@@ -432,11 +434,11 @@ class HostNetwork(VerticalScroll):
                 am.save_state(f"{result['name']}.yml", d_state)
                 nm.apply_state(d_state)
 
-                self.app.write_status(f"Configured Bond: {result['name']}")
+                logging.info(f"Configured Bond: {result['name']}")
                 self.query_one(ListBond).refresh_table()
                 self.app.refresh_dashboard_interface_table()
             except Exception as e:
-                self.app.write_status(f"Bond configuration failed: {e}")
+                logging.error(f"Bond configuration failed: {e}")
 
     def save_vlanconfig(self, result: Optional[dict] = None) -> None:
         """Save VLAN configuration: Generate state -> Save YAML -> Apply."""
@@ -455,11 +457,11 @@ class HostNetwork(VerticalScroll):
                 nm.apply_state(d_state)
 
                 s_msg = f"VLAN {result['name']} created on {result['base']}"
-                self.app.write_status(s_msg)
+                logging.info(s_msg)
                 self.query_one(ListVlan).refresh_table()
                 self.app.refresh_dashboard_interface_table()
             except Exception as e:
-                self.app.write_status(f"VLAN configuration failed: {e}")
+                logging.error(f"VLAN configuration failed: {e}")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Create button event handler."""

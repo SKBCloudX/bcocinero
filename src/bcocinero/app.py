@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from textual.app import App, ComposeResult
 from textual.containers import HorizontalScroll, VerticalScroll
@@ -6,6 +7,7 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widget import Widget
 from textual.widgets import Footer, Header, TabbedContent, TabPane, RichLog
+from bcocinero.common_logger import setup_app_logger
 from bcocinero.dashboard import Dashboard
 from bcocinero.hostnetwork import HostNetwork
 from bcocinero.installer import Installer
@@ -61,7 +63,7 @@ class Bcocinero(App):
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             color = self.LEVEL_COLORS.get(level, "green")
             log_widget.write(f"[{timestamp}]|[[bold {color}]{level}[/]]|{msg}")
-        except NoMatches:
+        except Exception:
             pass
 
     def write_status(self, msg: str) -> None:
@@ -77,8 +79,10 @@ class Bcocinero(App):
             self.log("Cannot find #dashboard_interface widget")
 
     def on_mount(self) -> None:
-        self.title = "BCocinero"
-        self.sub_title = "Installer for Burrito"
+        setup_app_logger(self)
+        self.title = "Bcocinero"
+        self.sub_title = "TUI Installer"
+        logging.info("Start Bcocinero.")
 
     def on_ready(self) -> None:
         self.push_screen(BcocineroScreen())

@@ -53,6 +53,10 @@ WantedBy=multi-user.target
 
             subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
             subprocess.run(
+                ["sudo", "systemctl", "enable", service_name],
+                check=True
+            )
+            subprocess.run(
                 ["sudo", "systemctl", "restart", service_name],
                 check=True
             )

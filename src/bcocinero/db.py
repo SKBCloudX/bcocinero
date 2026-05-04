@@ -1,5 +1,6 @@
 import logging
 import rqdb
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
 
 DEFAULT_URLS = ["127.0.0.1:4001"]
@@ -50,17 +51,34 @@ class BcocineroDB:
             logging.error(f"Schema initializationis failed: {e}")
             return False
 
-    def get_all_hosts(self) -> List:
-        sql = "SELECT hostname, mgmt_ip, role FROM hosts"
+    def get_all_hosts(self) -> List[Dict[str, Any]]:
+        hosts = []
+        sql = "SELECT hostname, mgmt_ip, role, updated_at FROM hosts"
         try:
             r = self.cursor.execute(sql)
-            return [
-                {"hostname": item[0], "mgmt_ip": item[1], "role": item[2]}
-                for item in r.results
-            ]
+            now = datetime.now(timezone.utc)
+            for item in r.results:
+                hostname, mgmt_ip, role, s_updated_at = item
+                try:
+                    s_dt = s_updated_at.replace('Z', '+00:00')
+                    updated_at = datetime.fromisoformat(s_dt)
+                    state = (
+                        "Healthy" if now - updated_at < timedelta(minutes=5)
+                        else "Stale"
+                    )
+                except Exceptiona as e:
+                    logging.warning(f"Time parse failed: {e}")
+                    state = "Unknown"
+                hosts.append({
+                    "hostname": hostname,
+                    "mgmt_ip": mgmt_ip,
+                    "role": role,
+                    "state": state
+                })
         except Exception as e:
             logging.error(f"Failed to query all hosts: {e}")
-            return []
+
+        return hosts
 
     def upsert_host(self, **kwargs) -> None:
         sql = """
