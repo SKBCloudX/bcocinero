@@ -1,11 +1,13 @@
 import logging
+from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.widget import Widget
-from textual.widgets import Button, DataTable, Label
+from textual.widgets import Button, DataTable, Label, ProgressBar, Static
 
 from bcocinero.nm_helpers import NetworkManager, InventoryGenerator
 from bcocinero.db import BcocineroDB
+from bcocinero.prep import Prep
 
 nm = NetworkManager()
 
@@ -55,13 +57,43 @@ class Installer(VerticalScroll):
             self.query_one(ListHost).refresh_table()
         if event.button.id == "create-inventory":
             self.query_one(ListHost).create_inventory()
+        if event.button.id == "installer-prepare":
+            self.run_prep_task()
+
+    @work(exclusive=True, thread=True)
+    async def run_prep_task(self) -> None:
+        btn = self.query_one("#installer-prepare", Button)
+        bar = self.query_one("#prep-progress", ProgressBar)
+        status = self.query_one("#prep-status", Static)
+
+        btn.disbled = True
+        bar.progress = 0
+
+        try:
+            prep_engine = Prep()
+            for progress, message in prep_engine.run_prep_gen():
+                bar.progress = progress
+                status.update(f"[cyan]{message}[/]")
+            logging.info("Prep process is completed successfully.")
+        except Exception as e:
+            status.update(f"[bold red]{str(e)}[/]")
+        finally:
+            btn.disabled = False
 
     def compose(self) -> ComposeResult:
         with Horizontal():
             yield Label("Hosts", classes="title")
             yield Button(label="Refresh", id="hosts-refresh",
                          variant="primary")
-            yield Button(label="Create Inventory", id="create-inventory",
+            yield Button(label="Inventory", id="create-inventory",
                          variant="primary")
         yield ListHost(id="host_list_widget")
+        with Horizontal(id="installer_block"):
+            yield Label("Installer", classes="title")
+            yield Button(label="Prep", id="installer-prepare",
+                         variant="primary")
+            yield Button(label="Recipe", id="installer-recipe",
+                         variant="primary")
+        yield Static("", id="prep-status")
+        yield ProgressBar(id="prep-progress", total=1.0, show_bar=True)
 

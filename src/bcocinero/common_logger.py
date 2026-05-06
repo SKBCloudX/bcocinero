@@ -3,41 +3,66 @@ import threading
 from pathlib import Path
 
 class TextualLogHandler(logging.Handler):
-    def __init__(self, app):
+    def __init__(self, app_instance):
         super().__init__()
-        self.app = app
+        self.app = app_instance
 
     def emit(self, record):
-        msg = record.getMessage()
+        msg = self.format(record)
         level = record.levelname
         if level == "WARNING": level = "WARN"
 
         if threading.current_thread() is threading.main_thread():
             self.app.post_log(msg, level)
+            self.app.write_status(msg)
         else:
             self.app.call_from_thread(self.app.post_log, msg, level)
+            self.app.call_from_thread(self.app.write_status, msg)
 
-def setup_app_logger(app, module_name: str = "bcocinero"):
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+class BcocineroLogger:
+    def __init__(self, app, module_name="bcocinero"):
+        self.app = app
+        self.module_name = module_name
+        self.log_dir = Path.home() / ".local" / "bcocinero"
+        self.log_file = self.log_dir / f"{module_name}.log"
 
-    log_dir = Path.home() / ".local" / "bcocinero"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / f"{module_name}.log"
+        self.log_dir.mkdir(parents=True, exist_ok=True)
 
-    file_handler = logging.FileHandler(
-        str(log_file), mode="a", encoding="utf-8", delay=False
-    )
-    file_handler.setFormatter(
-        logging.Formatter(
-            '%(asctime)s [%(levelname)s] [%(name)s] [%(module)s]:%(lineno)d] %(message)s',
+        self.logger = logging.getLogger()
+        self.logger.setLevel(logging.INFO)
+        for handler in self.logger.handlers[:]:
+            self.logger.removeHandler(handler)
+
+        self._setup_handlers()
+
+    def _setup_handlers(self):
+        file_formatter = logging.Formatter(
+            '%(asctime)s [%(levelname)s] %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
-    )
-    logger.addHandler(file_handler)
+        file_handler = logging.FileHandler(
+            str(self.log_file), mode="a", encoding="utf-8"
+        )
+        file_handler.setFormatter(file_formatter)
+        self.logger.addHandler(file_handler)
+        
+        textual_formatter = logging.Formatter('%(message)s')
+        textual_handler = TextualLogHandler(self.app)
+        textual_handler.setFormatter(textual_formatter)
+        self.logger.addHandler(textual_handler)
 
-    textual_handler = TextualLogHandler(app)
-    logger.addHandler(textual_handler)
-    logging.info(f"Logger initialized: Logging to {log_file}")
+    def load_prev_logs(self, count: int = 3):
+        if not self.log_file.exists():
+            return
 
-    return logger
+        try:
+            log_widget = self.app.screen.get_child_by_id("main_log")
+            with open(self.log_file, "r", encoding="utf-8") as f:
+                lines = [line.strip() for line in f if line.strip()]
+                last_lines = lines[-count:]
+                if last_lines:
+                    for line in last_lines:
+                        log_widget.write(f"[dim]{line}[/]")
+        except Exception as e:
+            return
+

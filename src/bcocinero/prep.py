@@ -3,7 +3,8 @@ import subprocess
 import tarfile
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Generator, Tuple
+from bcocinero.nm_helpers import NetworkManager
 
 class Prep:
     def __init__(self,
@@ -14,19 +15,48 @@ class Prep:
         self.install_path = (
             Path(install_path) if install_path else self.home_dir
         )
+        self.nm = NetworkManager()
 
-        logging.basicConfig(level=logging.INFO,
-                            format='%(levelname)s: %(message)s')
+    def _create_mgmt_ip_file(self, work_dir: Path):
+        mgmt_file = work_dir / "scripts/.mgmt_ip"
+        if mgmt_file.exists():
+            logging.debug(".mgmt_ip already exists.")
+            return
+
+        try:
+            mgmt_ip, _ = self.nm.get_mgmt_iface_info()
+
+            if mgmt_ip:
+                with open(mgmt_file, "w") as f:
+                    f.write(mgmt_ip)
+                logging.info("Created .mgmt_ip with {mgmt_ip}")
+            else:
+                logging.error("Cannot create .mgmt_ip.")
+        except Exception as e:
+            logging.error(f"Fail to create .mgmt_ip file: {e}")
 
     def _run_command(self, command: str, cwd: Optional[Path] = None):
         logging.info(f"Running command: {command}")
-        return subprocess.run(command, shell=True, cwd=cwd, check=True)
+        log_file_path = Path.home() / ".local" / "bcocinero" / "bcocinero.log"
+        try:
+            with open(log_file_path, "a", encoding="utf-8") as f:
+                return subprocess.run(
+                    command,
+                    shell=True,
+                    cwd=cwd,
+                    check=True,
+                    stdout=f,
+                    stderr=f
+                )
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Command failed with exit code {e.returncode}.")
+            raise
 
     def is_already_mounted(self) -> bool:
         return os.path.ismount(self.mnt_dir)
 
     def mount_iso(self) -> None:
-        if self.is_ready_mounted():
+        if self.is_already_mounted():
             logging.info(f"{self.mnt_dir} is already mounted.")
             return
 
@@ -44,7 +74,7 @@ class Prep:
             raise FileNotFoundError(f"No tarball is found in {self.mnt_dir}")
 
         tarball = tar_files[0]
-        logging.info(f"Extracting {tarball.name} to {self.install_Path}...")
+        logging.info(f"Extracting {tarball.name} to {self.install_path}...")
 
         with tarfile.open(tarball) as t:
             root_dir = t.getmembers()[0].name.split('/')[0]
@@ -56,15 +86,20 @@ class Prep:
         script_path = work_dir / "prepare.sh"
         if not script_path.exists():
             raise FileNotFoundError(f"prepare.sh is not found in {work_dir}.")
+
+        self._create_mgmt_ip_file(work_dir)
         logging.info("Running prepare.sh offline...")
         self._run_command("./prepare.sh offline", cwd=work_dir)
 
-    def run_prep(self) -> None:
+    def run_prep_gen(self) -> Generator[Tuple[float, str], None, None]:
         try:
+            yield 0.1, "Checking the iso file..."
             self.mount_iso()
-            extracted_dir = self.extract_package()
+            yield 0.4, "Extracting the tarball..."
+            extracted_dir = self.extract_tarball()
+            yield 0.7, "Running prepare.sh scripts..."
             self.run_prep_script(extracted_dir)
-            logging.info("Prep process is completed successfully.")
+            yield 1.0, "Prep process is completed successfully."
         except Exception as e:
             logging.error(f"Prep process is failed: {e}")
             raise

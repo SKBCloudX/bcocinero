@@ -20,11 +20,6 @@ RQLITED_PATH = "/usr/bin/rqlited"
 DATA_DIR = "/var/lib/rqlite"
 CHECK_INTERVAL = 10
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
 nm = NetworkManager()
 
 class BjefeDaemon:
@@ -61,7 +56,7 @@ class BjefeDaemon:
                     ["sudo", "mkdir", "-p", self.data_dir],
                     check=True
                 )
-                logging.info(f"Created {self.data_dir}")
+                logging.debug(f"Created {self.data_dir}")
             except subprocess.CalledProcessError as e:
                 logging.error(f"Failed to create directory: {e}")
                 return
@@ -72,7 +67,7 @@ class BjefeDaemon:
                     self.data_dir],
                 check=True
             )
-            logging.info(f"Change ownership of {self.data_dir} to {self.user}")
+            logging.debug(f"Change ownership of {self.data_dir} to {self.user}")
         except subprocess.CalledProcessError as e:
             logging.error(f"Failed to change ownership: {e}")
 

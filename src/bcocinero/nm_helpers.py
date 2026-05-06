@@ -194,7 +194,7 @@ sdc
         try:    
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write("\n".join(lines))
-            logging.info(f"Host inventory is created: {output_file}")
+            logging.debug(f"Host inventory is created: {output_file}")
         except Exception as e:
             logging.error(f"Fail to create the host inventory: {e}")
 

@@ -415,6 +415,9 @@ class BondConfigScreen(ModalScreen[dict]):
 
 class HostNetwork(VerticalScroll):
     """Network Configuration (Bond/VLAN) Manager."""
+    def __init__(self):
+        super().__init__()
+        self.logger = logging.getLogger("bcocinero")
 
     def on_open_bond_config(self, message: OpenBondConfig) -> None:
         """Edit existing bond interface message handler."""
@@ -434,11 +437,11 @@ class HostNetwork(VerticalScroll):
                 am.save_state(f"{result['name']}.yml", d_state)
                 nm.apply_state(d_state)
 
-                logging.info(f"Configured Bond: {result['name']}")
+                self.logger.info(f"Configured Bond: {result['name']}")
                 self.query_one(ListBond).refresh_table()
                 self.app.refresh_dashboard_interface_table()
             except Exception as e:
-                logging.error(f"Bond configuration failed: {e}")
+                self.logger.error(f"Bond configuration failed: {e}")
 
     def save_vlanconfig(self, result: Optional[dict] = None) -> None:
         """Save VLAN configuration: Generate state -> Save YAML -> Apply."""
@@ -457,11 +460,11 @@ class HostNetwork(VerticalScroll):
                 nm.apply_state(d_state)
 
                 s_msg = f"VLAN {result['name']} created on {result['base']}"
-                logging.info(s_msg)
+                self.logger.info(s_msg)
                 self.query_one(ListVlan).refresh_table()
                 self.app.refresh_dashboard_interface_table()
             except Exception as e:
-                logging.error(f"VLAN configuration failed: {e}")
+                self.logger.error(f"VLAN configuration failed: {e}")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Create button event handler."""

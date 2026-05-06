@@ -29,7 +29,7 @@ StatusBar {
     height: 1fr;
     content-align: center middle;
 }
-#vlan_list_widget, #bond_list_widget {
+#vlan_list_widget, #bond_list_widget { 
   height: 1fr;
   border: round $accent;
   margin: 0 0;
@@ -102,4 +102,14 @@ RadioButton {
   background: $surface;
   border-top: tall $accent;
   color: $text;
+}
+#host_list_widget {
+  height: 2fr;
+  border: round $accent;
+  margin: 0 0;
+}
+#installer_block {
+  height: 1fr;
+  border: round $accent;
+  margin: 0 0;
 }
