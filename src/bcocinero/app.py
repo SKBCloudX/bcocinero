@@ -92,7 +92,7 @@ class Bcocinero(App):
             self.log("Cannot find #dashboard_interface widget")
 
     def on_mount(self) -> None:
-        self.title = "Bcocinero"
+        self.title = "CloudX"
         self.sub_title = "TUI Installer"
 
     def on_ready(self) -> None:

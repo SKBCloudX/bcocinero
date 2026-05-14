@@ -44,6 +44,8 @@ class ListVlan(Widget):
         "Name", "Profile", "Base", "VID", "IP Address", "State",
         "Function", ""
     ]
+    _COL_EDIT = 6
+    _COL_DELETE = 7
 
     def compose(self) -> ComposeResult:
         yield DataTable(id="vlan_table",
@@ -73,7 +75,7 @@ class ListVlan(Widget):
         table = self.query_one("#vlan_table", DataTable)
         row_data = table.get_row_at(row_index)
         vlan_name = row_data[0]
-        if col == 6: # EDIT
+        if col == self._COL_EDIT:
             iface_info =nm.get_interface_info(vlan_name)
 
             ipv4_data = iface_info.get("ipv4", {}).get("address", [])
@@ -93,7 +95,7 @@ class ListVlan(Widget):
                 "gw": gw_str
             }
             self.app.push_screen(VlanConfigScreen(d_vlan), self.parent.save_vlanconfig)
-        elif col == 7:  # DELETE
+        elif col == self._COL_DELETE:
             s_msg = f"Are you sure to delete VLAN '{vlan_name}'?"
             self.app.push_screen(ConfirmScreen(s_msg),
                 lambda result: self.check_confirm(result, vlan_name))
@@ -242,6 +244,8 @@ class ListBond(Widget):
     l_bond_header = [
         "Name", "Profile", "Ports", "Mode", "State", "Function", ""
     ]
+    _COL_EDIT = 5
+    _COL_DELETE = 6
 
     def compose(self) -> ComposeResult:
         yield DataTable(id="bond_table",
@@ -272,10 +276,10 @@ class ListBond(Widget):
         row_data = table.get_row_at(row_index)
         bond_name = row_data[0]
 
-        if col == 5:  # EDIT
+        if col == self._COL_EDIT:
             d_iface = nm.get_interface_info(bond_name)
             self.post_message(OpenBondConfig(d_iface))
-        elif col == 6:  # DELETE
+        elif col == self._COL_DELETE:
             s_msg = f"Are you sure to delete Bond '{bond_name}'?"
             self.app.push_screen(ConfirmScreen(s_msg),
                 lambda result: self.handle_delete_result(result, bond_name))
@@ -370,7 +374,6 @@ class BondConfigScreen(ModalScreen[dict]):
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         if event.pressed:
-            # self.bond_mode = str(event.pressed.label)
             radioset = self.query_one("#mode_list", RadioSet)
             for btn in radioset.query(RadioButton):
                 btn.value = True if btn == event.pressed else False

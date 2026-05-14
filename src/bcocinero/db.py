@@ -66,7 +66,7 @@ class BcocineroDB:
                         "Healthy" if now - updated_at < timedelta(minutes=5)
                         else "Stale"
                     )
-                except Exceptiona as e:
+                except Exception as e:
                     logging.warning(f"Time parse failed: {e}")
                     state = "Unknown"
                 hosts.append({

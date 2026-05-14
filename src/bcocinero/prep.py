@@ -15,6 +15,7 @@ class Prep:
         self.install_path = (
             Path(install_path) if install_path else self.home_dir
         )
+        self.install_root_dir: Optional[Path] = None
         self.nm = NetworkManager()
 
     def _create_mgmt_ip_file(self, work_dir: Path):
@@ -80,7 +81,8 @@ class Prep:
             root_dir = t.getmembers()[0].name.split('/')[0]
             t.extractall(path=self.install_path)
 
-        return self.install_path / root_dir
+        self.install_root_dir = self.install_path / root_dir
+        return self.install_root_dir
 
     def run_prep_script(self, work_dir: Path) -> None:
         script_path = work_dir / "prepare.sh"
@@ -95,9 +97,9 @@ class Prep:
         try:
             yield 0.1, "Checking the iso file..."
             self.mount_iso()
-            yield 0.4, "Extracting the tarball..."
+            yield 0.3, "Extracting the tarball..."
             extracted_dir = self.extract_tarball()
-            yield 0.7, "Running prepare.sh scripts..."
+            yield 0.5, "Running prepare.sh scripts..."
             self.run_prep_script(extracted_dir)
             yield 1.0, "Prep process is completed successfully."
         except Exception as e:

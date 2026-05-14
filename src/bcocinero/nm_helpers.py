@@ -1,5 +1,6 @@
 import logging
 import subprocess
+import time
 import yaml
 import libnmstate
 import configparser
@@ -17,6 +18,7 @@ class ArtifactManager:
         self.base_dir: Path = Path.home() / ".local/bcocinero"
         self.jefe_file: Path = self.base_dir / "JEFE"
         self.artifact_dir = self.get_artifact_dir()
+        self.install_root_file: Path = self.artifact_dir / "INSTALL_ROOT"
 
     def get_artifact_dir(self) -> Path:
         """return artifacts_dir path."""
@@ -28,9 +30,25 @@ class ArtifactManager:
     def save_state(self, filename: str, state: Dict[str, Any]) -> Path:
         """save network state to yaml file."""
         target: Path = self.artifact_dir / filename
-        with open(target, 'w', encoding='utf-8') as f:
+        with open(target, "w", encoding="utf-8") as f:
             yaml.dump(state, f, default_flow_style=False, allow_unicode=True)
+
         return target
+
+    def save_install_root_file(self, install_root_dir: str) -> Tuple[bool, str]:
+        try:
+            with open(self.install_root_file, "w", encoding="utf-8") as f:
+                f.write(install_root_dir)
+            return (True, f"Succeed to save INSTALL_ROOT_FILE")
+        except OSError as e:
+            return (False, f"Fail to save INSTALL_ROOT_FILE: {e.strerror}")
+
+    def get_install_root(self) -> Optional[str]:
+        try:
+            with open(self.install_root_file, "r", encoding="utf-8") as f:
+                return f.read().strip()
+        except Exception:
+            return None
 
 class ProfileType(Enum):
     SERVICE = "service"
@@ -97,14 +115,14 @@ class InventoryGenerator:
                 "[mons]": storage_nodes[:3],
                 "[mgrs]": storage_nodes[:2],
                 "[osds]": storage_nodes,
-                "{rgws]": storage_nodes[-2:]
+                "[rgws]": storage_nodes[-2:]
             }
         elif num_storage > 0:
             ceph_config = {
                 "[mons]": [storage_nodes[0]],
                 "[mgrs]": [storage_nodes[0]],
                 "[osds]": storage_nodes,
-                "{rgws]": [storage_nodes[-1]]
+                "[rgws]": [storage_nodes[-1]]
             }
         else:
             ceph_config = {
@@ -200,18 +218,27 @@ sdc
 
 class NetworkManager:
     """Class for reading and setting of network interfaces"""
+    _STATE_TTL = 3.0
 
     def __init__(self) -> None:
         self.am = ArtifactManager()
+        self._cached_state: Optional[Dict[str, Any]] = None
+        self._cache_time: float = 0.0
 
-    def show_state(self) -> Dict[str, Any]:
-        """show the current network state."""
-        return libnmstate.show()
+    def show_state(self, force: bool = False) -> Dict[str, Any]:
+        """Return the current network state."""
+        now = time.monotonic()
+        cache_expired = (now - self._cache_time) > self._STATE_TTL
+        if force or self._cached_state is None or cache_expired:
+            self._cached_state = libnmstate.show()
+            self._cache_time = now
+        return self._cached_state
 
     def apply_state(self, state: Dict[str, Any]) -> None:
         """apply the configured network state."""
         try:
             libnmstate.apply(state)
+            self._cached_state = None
         except Exception as e:
             raise RuntimeError(f"Fail to apply the state: {e}")
 
@@ -386,7 +413,6 @@ class NetworkManager:
         try:
             with open(self.am.jefe_file, "w", encoding="utf-8") as f:
                 f.write(hc_ip)
-
             return (True, f"Succeed to save the Head Control IP.")
         except OSError as e:
             return (False, f"Fail to save the Head Control IP: {e.strerror}")

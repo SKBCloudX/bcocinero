@@ -1,5 +1,6 @@
 import ipaddress
 import logging
+import re
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -15,15 +16,22 @@ from bcocinero.nm_helpers import (
     NodeRole
 )
 
+_HOSTNAME_RE = re.compile(
+    r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$"
+)
 nm = NetworkManager()
 am = ArtifactManager()
 
 class Hostname(Widget):
-    host_data = nm.get_host_info()
-    hostname = reactive(host_data["hostname"])
-    nameserver = reactive(",".join(host_data["nameservers"]))
-    role = reactive(host_data["role"])
+    hostname: reactive[str] = reactive("")
+    nameserver: reactive[str] = reactive("")
+    role: reactive[str] = reactive("")
 
+    def on_mount(self) -> None:
+        host_data = nm.get_host_info()
+        self.hostname = host_data["hostname"]
+        self.nameserver = ",".join(host_data["nameservers"])
+        self.role = host_data["role"]
     def render(self) -> str:
         return f"Hostname: {self.hostname} ({self.role}) / DNS: {self.nameserver}"
 
@@ -99,8 +107,10 @@ class HostConfigScreen(ModalScreen[dict]):
                 yield Input(value=self.init_hostname, id="hn")
             with Horizontal():
                 yield Label("Role: ", classes="label-fixed")
-                yield Select(self.role_options, value=self.init_role,
-                        id="role", prompt="Select Role")
+                yield Select(
+                    self.role_options, value=self.init_role,
+                    id="role", type_to_search=True, allow_blank=False
+                )
             with Horizontal(id="hc_ip_container", classes="hidden"):
                 yield Label("Head Control IP", classes="label-fixed")
                 yield Input(placeholder="Enter Head Control IP address", 
@@ -135,6 +145,9 @@ class HostConfigScreen(ModalScreen[dict]):
             if not hn_val or not ns_val or role_val == Select.NULL:
                 self.app.notify("Enter hostname, nameservers and select role",
                                 severity="error")
+                return
+            if not _HOSTNAME_RE.match(hn_val):
+                self.app.notify("Invalid hostname format.", severity="error")
                 return
             if role_val != NodeRole.HEAD.value:
                 try:

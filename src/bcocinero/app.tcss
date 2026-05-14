@@ -113,3 +113,8 @@ RadioButton {
   border: round $accent;
   margin: 0 0;
 }
+#result_block {
+  height: 2fr;
+  border: round $accent;
+  margin: 0 0;
+}
