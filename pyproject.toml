@@ -22,6 +22,7 @@ dependencies = [
 
 [project.scripts]
 bcocinero = "bcocinero.app:entrypoint"
+cloudx-tui = "bcocinero.app:entrypoint"
 bcocinerod = "bcocinerod.main:main"
 bjefe = "bjefe.main:main"
 

@@ -18,6 +18,7 @@ from bcocinero.nm_helpers import (
 )
 from bcocinero.db import BcocineroDB
 from bcocinero.prep import Prep
+from bcocinero.vault import VaultManager
 
 nm = NetworkManager()
 am = ArtifactManager()
@@ -25,6 +26,10 @@ am = ArtifactManager()
 _RECIPE = "recipe.yml"
 _RECIPE_VARS = "recipe_vars.yml"
 _RECIPE_SAVED = ".recipe.yml"
+_VAULT_PASS_FILE = ".vaultpass"
+_UD_VAULT_FILE = "group_vars/all/ud_vault.yml"
+_VAULT_FILE = "group_vars/all/vault.yml"
+_NOVA_SSH_KEY = "/tmp/nova_sshkey"
 
 class ListHost(Widget):
     l_host_header = ["Name", "IP", "Role", "State"]
@@ -109,29 +114,38 @@ class RecipeModal(ModalScreen[dict]):
             yield Label(self.recipe_data.get("title"), id="recipe-title")
             with VerticalScroll(id="form-body"):
                 for field in self.recipe_data.get("fields", []):
-                    yield Label(field["label"], classes="label-fixed")
-
-                    if field["type"] == "input":
-                        input_widget = Input(
-                            placeholder=field.get("placeholder", ""),
-                            value=str(field.get("default", "")),
-                            id=field["name"]
-                        )
-                        self.widgets[field["name"]] = input_widget
-                        yield input_widget
-                    elif field["type"] == "select":
-                        select_options = [
-                            (opt[0], opt[1]) for opt in field.get("options", [])
-                        ]
-                        select_widget = Select(
-                            options=select_options,
-                            value=field.get("default", Select.NULL),
-                            id=field["name"],
-                            allow_blank=False,
-                            type_to_search=True
-                        )
-                        self.widgets[field["name"]] = select_widget
-                        yield select_widget
+                    with Horizontal():
+                        yield Label(field["label"], classes="label-fixed")
+                        if field["type"] == "input":
+                            input_widget = Input(
+                                placeholder=field.get("placeholder", ""),
+                                value=str(field.get("default", "")),
+                                id=field["name"]
+                            )
+                            self.widgets[field["name"]] = input_widget
+                            yield input_widget
+                        elif field["type"] == "password":
+                            input_widget = Input(
+                                placeholder=field.get("placeholder", ""),
+                                password=True,
+                                value=str(field.get("default", "")),
+                                id=field["name"]
+                            )
+                            self.widgets[field["name"]] = input_widget
+                            yield input_widget
+                        elif field["type"] == "select":
+                            select_options = [
+                                (opt[0], opt[1]) for opt in field.get("options", [])
+                            ]
+                            select_widget = Select(
+                                options=select_options,
+                                value=field.get("default", Select.NULL),
+                                id=field["name"],
+                                allow_blank=False,
+                                type_to_search=True
+                            )
+                            self.widgets[field["name"]] = select_widget
+                            yield select_widget
             with Horizontal(id="modal-buttons"):
                 yield Button("Save", variant="primary", id="save-btn")
                 yield Button("Cancel", variant="error", id="cancel-btn")
@@ -144,7 +158,50 @@ class RecipeModal(ModalScreen[dict]):
             self.dismiss(result_data)
         elif event.button.id == "cancel-btn":
             self.dismiss(None)
-            
+
+class VaultModal(ModalScreen[dict]):
+    def __init__(self):
+        super().__init__()
+        self.widgets = {}
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="vault-modal-dialog"):
+            yield Label("Vault (Secret Cabinet) Config", id="vault-title")
+            with VerticalScroll():
+                fields = [
+                    {"label": "User Password",
+                     "name": "user_pass",
+                     "placeholder": "Enter clex user password."},
+                    {"label": "OpenStack Admin Password",
+                     "name": "os_admin_pass",
+                     "placeholder": "Enter OpenStack admin password."}
+                ]
+                for field in fields:
+                    with Horizontal():
+                        yield Label(field["label"], classed="label-fixed")
+                        input_widget = Input(
+                            placeholder=field["placeholder"],
+                            password=True,
+                            id=field["name"]
+                        )
+                        self.widgets[field["name"]] = input_widget
+                        yield input_widget
+            with Horizontal(id="vault-modal-buttons"):
+                yield Button("Save", variant="primary", id="vault-save-btn")
+                yield Button("Cancel", variant="error", id="vault-cancel-btn")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "vault-save-btn":
+            result = {
+                name: widget.value for name, widget in self.widgets.items()
+            }
+            if not result["user_pass"] or not result["os_admin_pass"]:
+                return
+            self.dismiss(result)
+        elif event.button.id == "vault-cancel-btn":
+            self.dismiss(None)
+
+
 class Installer(VerticalScroll):
     def __init__(self):
         super().__init__()
@@ -168,6 +225,58 @@ class Installer(VerticalScroll):
                 recipe_saved_path
             )
             self.app.push_screen(self.modal_screen, self.handle_save_recipe)
+        if event.button.id == "installer-vault":
+            if not self.install_root_dir:
+                s_msg = "Cannot find install root directory. Did you run Prep?"
+                logging.error(s_msg)
+                return
+            self.modal_screen = VaultModal()
+            self.app.push_screen(self.modal_screen, self.handle_save_vault)
+
+    @work(exclusive=True, thread=True)
+    async def run_prep_task(self) -> None:
+        btn = self.query_one("#installer-prepare", Button)
+        bar = self.query_one("#prep-progress", ProgressBar)
+        status = self.query_one("#prep-status", Static)
+
+        self.app.call_from_thread(self._init_ui, btn, bar)
+
+        try:
+            prep_engine = Prep()
+            for progress, message in prep_engine.run_prep_gen():
+                self.app.call_from_thread(self._update_progress,
+                    bar, status, progress, message)
+            self.query_one(ListHost).create_inventory(
+                prep_engine.install_root_dir
+            )
+            am.save_install_root_file(f"{prep_engine.install_root_dir}")
+            logging.info("Prep process is completed successfully.")
+            self.app.call_from_thread(self._update_button, btn, "success")
+        except Exception as e:
+            logging.error(f"Error during prep: {e}")
+            self.app.call_from_thread(status.update, f"[bold red]{str(e)}[/]")
+            self.app.call_from_thread(self._update_button, btn)
+
+    def _init_ui(self, btn: Button, bar: Optional[ProgressBar] = None) -> None:
+        btn.disabled = True
+
+        if bar is not None:
+            bar.progress = 0
+
+    def _update_progress(self,
+                         bar: ProgressBar, status: Static,
+                         progress: float, message: str) -> None:
+        bar.progress = progress
+        status.update(f"[cyan]{message}[/]")
+
+    def _update_button(self, btn: Button, variant: str = "error") -> None:
+        cur_label = str(btn.label)
+        if not cur_label.endswith("(Done!)"):
+            btn.label = f"{cur_label}(Done!)"
+
+        btn.variant = variant
+        btn.disabled = False
+        btn.refresh(layout=True)
 
     def handle_save_recipe(self, data: Optional[Dict]) -> None:
         if not data:
@@ -177,6 +286,7 @@ class Installer(VerticalScroll):
         s_recipe_vars = f"{self.install_root_dir}/{_RECIPE_VARS}"
         s_recipe_saved = f"{self.install_root_dir}/{_RECIPE_SAVED}"
 
+        btn = self.query_one("#installer-recipe", Button)
         b_ret_vars, msg_vars = self.save_recipe_vars(s_recipe_vars, data)
         if b_ret_vars:
             logging.info(f"{_RECIPE_VARS} is saved.")
@@ -184,14 +294,21 @@ class Installer(VerticalScroll):
             logging.error(f"Fail to save {_RECIPE_VARS}: {msg_vars}")
 
         b_ret_saved, msg_saved = self.save_recipe_saved(s_recipe_saved, data)
-        if b_ret_vars:
+        if b_ret_saved:
             logging.info(f"{_RECIPE_SAVED} is saved.")
         else:
             logging.error(f"Fail to save {_RECIPE_SAVED}: {msg_saved}")
 
+        variant = "success" if b_ret_vars and b_ret_saved else "error"
+        self._update_button(btn, variant)
+
     def save_recipe_vars(self,
             filepath: str, data_to_save: dict) -> Tuple[bool, str]:
         processed_data = data_to_save.copy()
+        # process ntp servers
+        ntp_val = processed_data["ntp_server"]
+        processed_data["ntp_servers"] = [ntp_val] if ntp_val else []
+        # process storage_backends 
         cur_val = processed_data["storage_backends"]
         processed_data["storage_backends"] = [cur_val]
         try:
@@ -235,29 +352,25 @@ class Installer(VerticalScroll):
         except Exception as e:
             return (False, str(e))
 
-    @work(exclusive=True, thread=True)
-    async def run_prep_task(self) -> None:
-        btn = self.query_one("#installer-prepare", Button)
-        bar = self.query_one("#prep-progress", ProgressBar)
-        status = self.query_one("#prep-status", Static)
+    def handle_save_vault(self, data: Optional[dict]) -> None:
+        if not data:
+            logging.info("Vault configuration is cancelled.")
+            return
 
-        btn.disabled = True
-        bar.progress = 0
+        btn = self.query_one("#installer-vault", Button)
 
         try:
-            prep_engine = Prep()
-            for progress, message in prep_engine.run_prep_gen():
-                bar.progress = progress
-                status.update(f"[cyan]{message}[/]")
-            self.query_one(ListHost).create_inventory(
-                prep_engine.install_root_dir
-            )
-            am.save_install_root_file(f"{prep_engine.install_root_dir}")
-            logging.info("Prep process is completed successfully.")
+            vault_engine = VaultManager(self.install_root_dir)
+            vault_engine.generate_vault_files(data)
+
+            logging.info("Vault process is completed successfully.")
+            variant = "success"
         except Exception as e:
-            status.update(f"[bold red]{str(e)}[/]")
-        finally:
-            btn.disabled = False
+            logging.error(f"Failed to execute vault tasks: {e}")
+            btn.label = "Vault(Failed!)"
+            variant = "error"
+
+        self._update_button(btn, variant)
 
     def compose(self) -> ComposeResult:
         with Horizontal():
@@ -272,6 +385,8 @@ class Installer(VerticalScroll):
             yield Button(label="Prep", id="installer-prepare",
                          variant="primary")
             yield Button(label="Recipe", id="installer-recipe",
+                         variant="primary")
+            yield Button(label="Vault", id="installer-vault",
                          variant="primary")
         yield Static("", id="prep-status")
         yield ProgressBar(id="prep-progress", total=1.0, show_bar=True)
