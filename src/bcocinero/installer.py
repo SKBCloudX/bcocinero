@@ -11,6 +11,7 @@ from textual.widget import Widget
 from textual.widgets import (
     Button, DataTable, Input, Select, Label, ProgressBar, Static
 )
+
 from bcocinero.nm_helpers import (
     NetworkManager,
     ArtifactManager,
@@ -30,6 +31,15 @@ _VAULT_PASS_FILE = ".vaultpass"
 _UD_VAULT_FILE = "group_vars/all/ud_vault.yml"
 _VAULT_FILE = "group_vars/all/vault.yml"
 _NOVA_SSH_KEY = "/tmp/nova_sshkey"
+
+class QuotedStr(str):
+    pass
+
+def quoted_str_representer(dumper, data):
+    return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='"')
+
+yaml.SafeDumper.add_representer(QuotedStr, quoted_str_representer)
+yaml.Dumper.add_representer(QuotedStr, quoted_str_representer)
 
 class ListHost(Widget):
     l_host_header = ["Name", "IP", "Role", "State"]
@@ -79,7 +89,6 @@ class RecipeModal(ModalScreen[dict]):
         self.recipe_data = {}
         self.widgets = {}
         self.load_error = None
-
         self._load_recipe()
 
     def _load_recipe(self) -> None:
@@ -114,20 +123,16 @@ class RecipeModal(ModalScreen[dict]):
             yield Label(self.recipe_data.get("title"), id="recipe-title")
             with VerticalScroll(id="form-body"):
                 for field in self.recipe_data.get("fields", []):
-                    with Horizontal():
+                    is_netapp = field["name"].startswith("netapp_")
+                    row_classes = (
+                        "form-row netapp-field" if is_netapp else "form-row"
+                    )
+                    with Horizontal(classes=row_classes):
                         yield Label(field["label"], classes="label-fixed")
-                        if field["type"] == "input":
+                        if field["type"] in ("input", "password"):
                             input_widget = Input(
                                 placeholder=field.get("placeholder", ""),
-                                value=str(field.get("default", "")),
-                                id=field["name"]
-                            )
-                            self.widgets[field["name"]] = input_widget
-                            yield input_widget
-                        elif field["type"] == "password":
-                            input_widget = Input(
-                                placeholder=field.get("placeholder", ""),
-                                password=True,
+                                password=(field["type"] == "password"),
                                 value=str(field.get("default", "")),
                                 id=field["name"]
                             )
@@ -135,7 +140,7 @@ class RecipeModal(ModalScreen[dict]):
                             yield input_widget
                         elif field["type"] == "select":
                             select_options = [
-                                (opt[0], opt[1]) for opt in field.get("options", [])
+                                (opt[0], opt[1]) for opt in field["options"]
                             ]
                             select_widget = Select(
                                 options=select_options,
@@ -150,12 +155,57 @@ class RecipeModal(ModalScreen[dict]):
                 yield Button("Save", variant="primary", id="save-btn")
                 yield Button("Cancel", variant="error", id="cancel-btn")
 
+    def on_mount(self) -> None:
+        select_widget = self.widgets.get("storage_backends")
+        if select_widget:
+            self._toggle_netapp_fields(select_widget.value)
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select.id == "storage_backends":
+            self._toggle_netapp_fields(event.value)
+
+    def _toggle_netapp_fields(self, backend_value: str) -> None:
+        show_netapp = (backend_value == "netapp")
+        for row in self.query(".netapp-field"):
+            row.styles.display = "block" if show_netapp else "none"
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save-btn":
-            result_data = {
+            raw = {
                 name: widget.value for name, widget in self.widgets.items()
             }
-            self.dismiss(result_data)
+            result = {
+                k: v for k, v in raw.items() if not k.startswith("netapp_")
+            }
+            if raw.get("storage_backends") == "netapp":
+                q_transport = QuotedStr("{{ netapp_transport_type }}")
+                q_password = QuotedStr(raw.get("netapp_pass", ""))
+                q_nfsopts = QuotedStr("{{ netapp_nfs_mount_options }}")
+                result["netapp_tmpl"] = [
+                    {
+                        "name": "netapp",
+                        "managementLIF": raw.get("netapp_mgmt_lif", ""),
+                        "dataLIF": raw.get("netapp_data_lif1", ""),
+                        "transportType": q_transport,
+                        "svm": raw.get("netapp_svm", ""),
+                        "username": raw.get("netapp_user", ""),
+                        "password": q_password,
+                        "nfsMountOptions": q_nfsopts,
+                        "shares": [raw.get("netapp_shares1", "")]
+                    },
+                    {
+                        "name": "netapp2",
+                        "managementLIF": raw.get("netapp_mgmt_lif", ""),
+                        "dataLIF": raw.get("netapp_data_lif2", ""),
+                        "transportType": q_transport,
+                        "svm": raw.get("netapp_svm", ""),
+                        "username": raw.get("netapp_user", ""),
+                        "password": q_password,
+                        "nfsMountOptions": q_nfsopts,
+                        "shares": [raw.get("netapp_shares2", "")]
+                    }
+                ]
+            self.dismiss(result)
         elif event.button.id == "cancel-btn":
             self.dismiss(None)
 
@@ -304,14 +354,37 @@ class Installer(VerticalScroll):
 
     def save_recipe_vars(self,
             filepath: str, data_to_save: dict) -> Tuple[bool, str]:
-        processed_data = data_to_save.copy()
-        # process ntp servers
-        ntp_val = processed_data["ntp_server"]
-        processed_data["ntp_servers"] = [ntp_val] if ntp_val else []
-        # process storage_backends 
-        cur_val = processed_data["storage_backends"]
-        processed_data["storage_backends"] = [cur_val]
         try:
+            processed_data = data_to_save.copy()
+            # process ntp servers
+            ntp_val = processed_data.get("ntp_servers", None)
+            processed_data["ntp_servers"] = [ntp_val] if ntp_val else []
+            # process storage_backends 
+            sb_val = processed_data.get("storage_backends", None)
+            processed_data["storage_backends"] = [sb_val] if sb_val else []
+            if sb_val == "ceph":
+                processed_data["ceph_osd_use_all"] = True
+            # process network interface names
+            mgmt = nm.get_interface_by_profile("management")
+            svc = nm.get_interface_by_profile("service")
+            provider = nm.get_interface_by_profile("provider")
+            storage = nm.get_interface_by_profile("storage")
+            if not mgmt:
+                raise ValueError("Management profile must exist.")
+            if not provider:
+                raise ValueError("Provider profile must exist.")
+            mgmt_name = mgmt.get("name")
+            provider_name = provider.get("name")
+            svc_name = svc.get("name") if svc else mgmt_name
+            storage_name = storage.get("name") if storage else svc_name
+            iface_data = {
+                "svc_iface_name": svc_name,
+                "mgmt_iface_name": mgmt_name,
+                "provider_iface_name": provider_name,
+                "storage_iface_name": storage_name
+            }
+            processed_data = iface_data | processed_data
+
             with open(filepath, "w", encoding="utf-8") as f:
                 yaml.safe_dump(
                     processed_data, f, allow_unicode=True, sort_keys=False
@@ -334,12 +407,33 @@ class Installer(VerticalScroll):
                     "fields": []
                 }
             }
+            netapp_lookup = {}
+            if "netapp_tmpl" in data_to_save:
+                tmpl_list = data_to_save["netapp_tmpl"]
+                tmpl1 = tmpl_list[0] if len(tmpl_list) > 0 else {}
+                tmpl2 = tmpl_list[1] if len(tmpl_list) > 1 else {}
+                
+                netapp_lookup = {
+                    "netapp_mgmt_lif": tmpl1.get("managementLIF"),
+                    "netapp_svm": tmpl1.get("svm"),
+                    "netapp_user": tmpl1.get("username"),
+                    "netapp_pass": tmpl1.get("password"),
+                    "netapp_data_lif1": tmpl1.get("dataLIF"),
+                    "netapp_shares1": tmpl1.get("shares")[0] if tmpl1.get("shares") else "",
+                    "netapp_data_lif2": tmpl2.get("dataLIF"),
+                    "netapp_shares2": tmpl2.get("shares")[0] if tmpl2.get("shares") else "",
+                }
 
             for field in self.modal_screen.recipe_data.get("fields", []):
                 field_copy = field.copy()
                 name = field["name"]
-                if name in data_to_save:
+
+                if name.startswith("netapp_") and name in netapp_lookup:
+                    val = netapp_lookup[name]
+                    field_copy["default"] = str(val) if val is not None else ""
+                elif name in data_to_save:
                     field_copy["default"] = data_to_save[name]
+
                 output_data["variable"]["fields"].append(field_copy)
 
             with open(filepath, "w", encoding="utf-8") as f:
