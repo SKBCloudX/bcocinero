@@ -5,6 +5,7 @@ import string
 import uuid
 import subprocess
 import logging
+from pathlib import Path
 from typing import Dict
 
 logger = logging.getLogger("bcocinero")
@@ -46,8 +47,16 @@ class VaultManager:
         return f"{pre}{mix}{post}"
 
     def _encrypt_file(self, target_filepath: str) -> None:
+        home_dir = Path(self.install_root_dir).parent
+        ansible_vault_path = str(home_dir / ".envs/burrito/bin/ansible-vault")
         subprocess.run(
-            ["ansible-vault", "encrypt", "--vault-password-file", self.vault_pass_path, target_filepath],
+            [
+                ansible_vault_path,
+                "encrypt",
+                "--vault-password-file",
+                self.vault_pass_path,
+                target_filepath
+            ],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE

@@ -4,8 +4,9 @@ Hostname, Nameserver {
 Button {
   border: none;
   min-width: 0;
-  margin: 0 1;
-  padding: 0 1;
+  height: 1;
+  margin-right: 1;
+  padding: 0 0;
 }
 StatusBar {
   dock: bottom;
@@ -108,7 +109,12 @@ RadioButton {
   border: round $accent;
   margin: 0 0;
 }
-#installer_block {
+#prep_block {
+  height: 1fr;
+  border: round $accent;
+  margin: 0 0;
+}
+#playbooks_block {
   height: 1fr;
   border: round $accent;
   margin: 0 0;

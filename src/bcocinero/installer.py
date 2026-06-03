@@ -27,10 +27,6 @@ am = ArtifactManager()
 _RECIPE = "recipe.yml"
 _RECIPE_VARS = "recipe_vars.yml"
 _RECIPE_SAVED = ".recipe.yml"
-_VAULT_PASS_FILE = ".vaultpass"
-_UD_VAULT_FILE = "group_vars/all/ud_vault.yml"
-_VAULT_FILE = "group_vars/all/vault.yml"
-_NOVA_SSH_KEY = "/tmp/nova_sshkey"
 
 class QuotedStr(str):
     pass
@@ -228,7 +224,7 @@ class VaultModal(ModalScreen[dict]):
                 ]
                 for field in fields:
                     with Horizontal():
-                        yield Label(field["label"], classed="label-fixed")
+                        yield Label(field["label"], classes="label-fixed")
                         input_widget = Input(
                             placeholder=field["placeholder"],
                             password=True,
@@ -256,12 +252,13 @@ class Installer(VerticalScroll):
     def __init__(self):
         super().__init__()
         self.install_root_dir = am.get_install_root()
+        self.home_dir = Path(self.install_root_dir).parent
         self.modal_screen = None
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "hosts-refresh":
             self.query_one(ListHost).refresh_table()
-        if event.button.id == "installer-prepare":
+        if event.button.id == "installer-prep":
             self.run_prep_task()
         if event.button.id == "installer-recipe":
             if not self.install_root_dir:
@@ -285,7 +282,7 @@ class Installer(VerticalScroll):
 
     @work(exclusive=True, thread=True)
     async def run_prep_task(self) -> None:
-        btn = self.query_one("#installer-prepare", Button)
+        btn = self.query_one("#installer-prep", Button)
         bar = self.query_one("#prep-progress", ProgressBar)
         status = self.query_one("#prep-status", Static)
 
@@ -319,10 +316,10 @@ class Installer(VerticalScroll):
         bar.progress = progress
         status.update(f"[cyan]{message}[/]")
 
-    def _update_button(self, btn: Button, variant: str = "error") -> None:
-        cur_label = str(btn.label)
-        if not cur_label.endswith("(Done!)"):
-            btn.label = f"{cur_label}(Done!)"
+    def _update_button(self, btn: Button, variant: str) -> None:
+        #cur_label = str(btn.label)
+        #if not cur_label.endswith("(Done!)"):
+        #    btn.label = f"{cur_label}(Done!)"
 
         btn.variant = variant
         btn.disabled = False
@@ -461,12 +458,34 @@ class Installer(VerticalScroll):
             variant = "success"
         except Exception as e:
             logging.error(f"Failed to execute vault tasks: {e}")
-            btn.label = "Vault(Failed!)"
             variant = "error"
 
         self._update_button(btn, variant)
 
+    def _init_workflow(self) -> None:
+        self.config_path = Path(self.install_root_dir) / "cooking.yml"
+        self.status_path = (
+            self.config_path.parent / f".{self.config_path.name}"
+        )
+        self.workflow_data = {}
+        self.btn_map = {}
+        
+        target_path = (
+            self.status_path if self.status_path.exists() else self.config_path
+        )
+        try:
+            with open(target_path, "r", encoding="utf-8") as f:
+                self.workflow_data = yaml.safe_load(f) or {}
+        except Exception:
+            self.workflow_data = {
+                "install": {"preparations": [], "playbooks": []}
+            }
+
     def compose(self) -> ComposeResult:
+        if not hasattr(self, "workflow_data") or not self.workflow_data:
+            self._init_workflow()
+        install_data = self.workflow_data.get("install", {})
+
         with Horizontal():
             yield Label("Hosts", classes="title")
             yield Button(label="Refresh", id="hosts-refresh",
@@ -474,14 +493,51 @@ class Installer(VerticalScroll):
             yield Button(label="Inventory", id="inventory-view",
                          variant="primary")
         yield ListHost(id="host_list_widget")
+
         yield Label("Installer", classes="title")
-        with Horizontal(id="installer_block"):
-            yield Button(label="Prep", id="installer-prepare",
-                         variant="primary")
-            yield Button(label="Recipe", id="installer-recipe",
-                         variant="primary")
-            yield Button(label="Vault", id="installer-vault",
-                         variant="primary")
+
+        if "preparations" in install_data:
+            with Horizontal(id="prep_block"):
+                for item in install_data["preparations"]:
+                    name = item["name"]
+                    is_done = "completed_at" in item
+                    btn_id = f"installer-{name}"
+                    variant = "success" if is_done else "default"
+                    lbl = f"{name} (Done!)" if is_done else name.capitalize()
+                    btn = Button(label=lbl, id=btn_id, variant=variant)
+                    self.btn_map[btn_id] = item
+                    yield btn
         yield Static("", id="prep-status")
         yield ProgressBar(id="prep-progress", total=1.0, show_bar=True)
 
+        if "playbooks" in install_data:
+            yield Label("Playbooks", classes="title")
+            with Horizontal(id="playbooks_block"):
+                for item in install_data["playbooks"]:
+                    name = item["name"]
+                    is_done = "completed_at" in item
+
+                    btn_id = f"playbook-{name}"
+                    variant = "success" if is_done else "default"
+                    lbl = f"{name} (Done!)" if is_done else name
+
+                    btn = Button(label=lbl, id=btn_id, variant=variant)
+                    self.btn_map[btn_id] = item  # 참조 포인터 주소 공유
+                    yield btn
+
+    def _complete_progress_tracker(self, button_widget: Button) -> None:
+        """타임스탬프 주입 및 .cooking.yml 상태 격리 저장 유틸리티"""
+        btn_id = button_widget.id
+        if btn_id in self.btn_map:
+            target_item = self.btn_map[btn_id]
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            target_item["completed_at"] = current_time
+
+            try:
+                with open(self.status_path, "w", encoding="utf-8") as f:
+                    yaml.safe_dump(self.workflow_data, f, allow_unicode=True, sort_keys=False)
+            except Exception as e:
+                logging.error(f"Failed to save progress cache: {e}")
+
+        self._update_button(button_widget, "success")
