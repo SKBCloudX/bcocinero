@@ -1,6 +1,7 @@
 import os
 import yaml
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from textual import work
@@ -298,7 +299,7 @@ class Installer(VerticalScroll):
             )
             am.save_install_root_file(f"{prep_engine.install_root_dir}")
             logging.info("Prep process is completed successfully.")
-            self.app.call_from_thread(self._update_button, btn, "success")
+            self.app.call_from_thread(self._complete_progress_tracker, btn)
         except Exception as e:
             logging.error(f"Error during prep: {e}")
             self.app.call_from_thread(status.update, f"[bold red]{str(e)}[/]")
@@ -346,8 +347,10 @@ class Installer(VerticalScroll):
         else:
             logging.error(f"Fail to save {_RECIPE_SAVED}: {msg_saved}")
 
-        variant = "success" if b_ret_vars and b_ret_saved else "error"
-        self._update_button(btn, variant)
+        if b_ret_vars and b_ret_saved:
+            self._complete_progress_tracker(btn)
+        else:
+            self._update_button(btn, "error")
 
     def save_recipe_vars(self,
             filepath: str, data_to_save: dict) -> Tuple[bool, str]:
@@ -455,12 +458,11 @@ class Installer(VerticalScroll):
             vault_engine.generate_vault_files(data)
 
             logging.info("Vault process is completed successfully.")
-            variant = "success"
+            self._complete_progress_tracker(btn)
         except Exception as e:
             logging.error(f"Failed to execute vault tasks: {e}")
             variant = "error"
-
-        self._update_button(btn, variant)
+            self._update_button(btn, "error")
 
     def _init_workflow(self) -> None:
         self.config_path = Path(self.install_root_dir) / "cooking.yml"
@@ -522,11 +524,14 @@ class Installer(VerticalScroll):
                     lbl = f"{name} (Done!)" if is_done else name
 
                     btn = Button(label=lbl, id=btn_id, variant=variant)
-                    self.btn_map[btn_id] = item  # 참조 포인터 주소 공유
+                    self.btn_map[btn_id] = item
                     yield btn
 
+    def run_playbook_task(self, button_widget: Button) -> None:
+        # run playbook code here
+        self._complete_progress_tracker(button_widget)
+
     def _complete_progress_tracker(self, button_widget: Button) -> None:
-        """타임스탬프 주입 및 .cooking.yml 상태 격리 저장 유틸리티"""
         btn_id = button_widget.id
         if btn_id in self.btn_map:
             target_item = self.btn_map[btn_id]
@@ -536,8 +541,13 @@ class Installer(VerticalScroll):
 
             try:
                 with open(self.status_path, "w", encoding="utf-8") as f:
-                    yaml.safe_dump(self.workflow_data, f, allow_unicode=True, sort_keys=False)
+                    yaml.safe_dump(
+                        self.workflow_data,
+                        f,
+                        allow_unicode=True,
+                        sort_keys=False
+                    )
             except Exception as e:
-                logging.error(f"Failed to save progress cache: {e}")
+                logging.error(f"Failed to save cooking status: {e}")
 
         self._update_button(button_widget, "success")
