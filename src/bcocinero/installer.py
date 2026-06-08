@@ -529,6 +529,9 @@ class Installer(VerticalScroll):
         yield ListHost(id="host_list_widget")
 
         yield Label("Installer", classes="title")
+
+        next_button_allowed = True
+
         if "preparations" in install_data:
             with Horizontal(classes="workflow-row", id="prep_block"):
                 yield Label("Prep:", classes="row-header")
@@ -547,8 +550,10 @@ class Installer(VerticalScroll):
                         lbl = name
                     btn = Button(label=lbl, id=btn_id, variant=variant,
                             classes="workflow-btn")
-                    self.btn_map[btn_id] = item
+                    btn.disabled = not next_button_allowed
                     yield btn
+                    self.btn_map[btn_id] = item
+                    next_button_allowed = (state == "pass")
         if "playbooks" in install_data:
             with Horizontal(classes="workflow-row"):
                 yield Label("Cook:", classes="row-header")
@@ -568,8 +573,10 @@ class Installer(VerticalScroll):
                             lbl = name
                         btn = Button(label=lbl, id=btn_id, variant=variant,
                                 classes="workflow-btn")
-                        self.btn_map[btn_id] = item
+                        btn.disabled = not next_button_allowed
                         yield btn
+                        self.btn_map[btn_id] = item
+                        next_button_allowed = (state == "pass")
         yield Static("", id="prep-status")
         yield ProgressBar(id="prep-progress", total=1.0, show_bar=True)
 
@@ -601,3 +608,30 @@ class Installer(VerticalScroll):
 
         variant = "success" if is_success else "error"
         self._update_button(button_widget, variant)
+        if is_success:
+            self._unlock_next_step(btn_id)
+
+    def _unlock_next_step(self, current_btn_id: str) -> None:
+        data = self.workflow_data.get("install", {})
+        ordered_ids = []
+        if "preparations" in data:
+            ordered_ids.extend([
+                f"installer-{i['name']}" for i in data["preparations"]
+            ])
+        if "playbooks" in data:
+            ordered_ids.extend([
+                f"installer-{i['name']}" for i in data["playbooks"]
+            ])
+        try:
+            cur_index = ordered_ids.index(current_btn_id)
+            if cur_index + 1 < len(ordered_ids):
+                next_btn_id = ordered_ids[cur_index+1]
+                next_button = self.query_one(f"#{next_btn_id}", Button)
+                if next_button:
+                    next_button.disabled = False
+                    next_button.refresh()
+        except ValueError:
+            pass
+        except Exception as e:
+            logging.error(f"Failed to unlock next step: {e}")
+
