@@ -105,19 +105,31 @@ RadioButton {
   color: $text;
 }
 #host_list_widget {
-  height: 2fr;
+  height: 7;
+  min-height: 5;
   border: round $accent;
   margin: 0 0;
 }
-#prep_block {
-  height: 1fr;
-  border: round $accent;
-  margin: 0 0;
+.workflow-row {
+  margin-bottom: 1;
+  align: left middle;
 }
 #playbooks_block {
-  height: 1fr;
-  border: round $accent;
-  margin: 0 0;
+  layout: grid;
+  grid-size: 6 2;
+  grid-gutter: 0 0;
+  height: auto;
+  width: 100%;
+}
+.row-header {
+  width: 5;
+  color: $accent;
+}
+.workflow-btn {
+  margin: 0 1;
+  min-width: 0;
+  width: auto;
+  height: 1;
 }
 #result_block {
   height: 2fr;

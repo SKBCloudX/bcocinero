@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from textual import work
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, VerticalScroll
+from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import (
@@ -184,7 +184,7 @@ class RecipeModal(ModalScreen[dict]):
                         "managementLIF": raw.get("netapp_mgmt_lif", ""),
                         "dataLIF": raw.get("netapp_data_lif1", ""),
                         "transportType": q_transport,
-                        "svm": raw.get("netapp_svm", ""),
+                        "svm1": raw.get("netapp_svm1", ""),
                         "username": raw.get("netapp_user", ""),
                         "password": q_password,
                         "nfsMountOptions": q_nfsopts,
@@ -195,7 +195,7 @@ class RecipeModal(ModalScreen[dict]):
                         "managementLIF": raw.get("netapp_mgmt_lif", ""),
                         "dataLIF": raw.get("netapp_data_lif2", ""),
                         "transportType": q_transport,
-                        "svm": raw.get("netapp_svm", ""),
+                        "svm2": raw.get("netapp_svm2", ""),
                         "username": raw.get("netapp_user", ""),
                         "password": q_password,
                         "nfsMountOptions": q_nfsopts,
@@ -299,11 +299,13 @@ class Installer(VerticalScroll):
             )
             am.save_install_root_file(f"{prep_engine.install_root_dir}")
             logging.info("Prep process is completed successfully.")
-            self.app.call_from_thread(self._complete_progress_tracker, btn)
+            self.app.call_from_thread(
+                self._complete_progress_tracker, btn, is_success=True)
         except Exception as e:
             logging.error(f"Error during prep: {e}")
             self.app.call_from_thread(status.update, f"[bold red]{str(e)}[/]")
-            self.app.call_from_thread(self._update_button, btn)
+            self.app.call_from_thread(
+                self._update_button, btn, variant="error")
 
     def _init_ui(self, btn: Button, bar: Optional[ProgressBar] = None) -> None:
         btn.disabled = True
@@ -317,11 +319,14 @@ class Installer(VerticalScroll):
         bar.progress = progress
         status.update(f"[cyan]{message}[/]")
 
-    def _update_button(self, btn: Button, variant: str) -> None:
-        #cur_label = str(btn.label)
-        #if not cur_label.endswith("(Done!)"):
-        #    btn.label = f"{cur_label}(Done!)"
-
+    def _update_button(self, btn: Button, variant: str = "default") -> None:
+        orig_name = btn.id.split("-", 1)[-1]
+        if variant == "success":
+            btn.label = f"{orig_name}[bold green](P)[/]"
+        elif variant == "error":
+            btn.label = f"{orig_name}[bold red](F)[/]"
+        else:
+            btn.label = orig_name
         btn.variant = variant
         btn.disabled = False
         btn.refresh(layout=True)
@@ -348,7 +353,7 @@ class Installer(VerticalScroll):
             logging.error(f"Fail to save {_RECIPE_SAVED}: {msg_saved}")
 
         if b_ret_vars and b_ret_saved:
-            self._complete_progress_tracker(btn)
+            self._complete_progress_tracker(btn, is_success=True)
         else:
             self._update_button(btn, "error")
 
@@ -383,7 +388,7 @@ class Installer(VerticalScroll):
                 "provider_iface_name": provider_name,
                 "storage_iface_name": storage_name
             }
-            processed_data = iface_data | processed_data
+            processed_data |= iface_data
 
             with open(filepath, "w", encoding="utf-8") as f:
                 yaml.safe_dump(
@@ -407,6 +412,13 @@ class Installer(VerticalScroll):
                     "fields": []
                 }
             }
+
+            if (
+                hasattr(self, "workflow_data")
+                and "install" in self.workflow_data
+            ):
+                output_data["install"] = self.workflow_data["install"]
+
             netapp_lookup = {}
             if "netapp_tmpl" in data_to_save:
                 tmpl_list = data_to_save["netapp_tmpl"]
@@ -433,8 +445,25 @@ class Installer(VerticalScroll):
                     field_copy["default"] = str(val) if val is not None else ""
                 elif name in data_to_save:
                     field_copy["default"] = data_to_save[name]
-
                 output_data["variable"]["fields"].append(field_copy)
+
+            self.workflow_data = output_data
+
+            # update preparations recipes
+            new_preps = (
+                self.workflow_data.get("install", {}).get("preparations", [])
+            )
+            for item in new_preps:
+                item_name = item.get("name")
+                if item_name in self.btn_map:
+                    self.btn_map[item_name] = item
+            new_plays = (
+                self.workflow_data.get("install", {}).get("playboks", [])
+            )
+            for item in new_plays:
+                item_name = item.get("name")
+                if item_name in self.btn_map:
+                    self.btn_map[item_name] = item
 
             with open(filepath, "w", encoding="utf-8") as f:
                 yaml.safe_dump(
@@ -458,14 +487,14 @@ class Installer(VerticalScroll):
             vault_engine.generate_vault_files(data)
 
             logging.info("Vault process is completed successfully.")
-            self._complete_progress_tracker(btn)
+            self._complete_progress_tracker(btn, is_success=True)
         except Exception as e:
             logging.error(f"Failed to execute vault tasks: {e}")
             variant = "error"
             self._update_button(btn, "error")
 
     def _init_workflow(self) -> None:
-        self.config_path = Path(self.install_root_dir) / "cooking.yml"
+        self.config_path = Path(self.install_root_dir) / "recipe.yml"
         self.status_path = (
             self.config_path.parent / f".{self.config_path.name}"
         )
@@ -479,6 +508,7 @@ class Installer(VerticalScroll):
             with open(target_path, "r", encoding="utf-8") as f:
                 self.workflow_data = yaml.safe_load(f) or {}
         except Exception:
+            logging.error(f"Failed to load the original recipe: {e}")
             self.workflow_data = {
                 "install": {"preparations": [], "playbooks": []}
             }
@@ -488,6 +518,8 @@ class Installer(VerticalScroll):
             self._init_workflow()
         install_data = self.workflow_data.get("install", {})
 
+        if not install_data.get("preparations") and not install_data.get("playbooks"):
+            yield Label("Warning: No workflow data found in recipe.yml!")
         with Horizontal():
             yield Label("Hosts", classes="title")
             yield Button(label="Refresh", id="hosts-refresh",
@@ -497,47 +529,64 @@ class Installer(VerticalScroll):
         yield ListHost(id="host_list_widget")
 
         yield Label("Installer", classes="title")
-
         if "preparations" in install_data:
-            with Horizontal(id="prep_block"):
+            with Horizontal(classes="workflow-row", id="prep_block"):
+                yield Label("Prep:", classes="row-header")
                 for item in install_data["preparations"]:
                     name = item["name"]
-                    is_done = "completed_at" in item
+                    state = item.get("state", "")
                     btn_id = f"installer-{name}"
-                    variant = "success" if is_done else "default"
-                    lbl = f"{name} (Done!)" if is_done else name.capitalize()
-                    btn = Button(label=lbl, id=btn_id, variant=variant)
+                    if state == "pass":
+                        variant = "success"
+                        lbl = f"{name} [bold green](P)[/]"
+                    elif state == "fail":
+                        variant = "error"
+                        lbl = f"{name} [bold red](F)[/]"
+                    else:
+                        variant = "default"
+                        lbl = name
+                    btn = Button(label=lbl, id=btn_id, variant=variant,
+                            classes="workflow-btn")
                     self.btn_map[btn_id] = item
                     yield btn
+        if "playbooks" in install_data:
+            with Horizontal(classes="workflow-row"):
+                yield Label("Cook:", classes="row-header")
+                with Container(id="playbooks_block"):
+                    for item in install_data["playbooks"]:
+                        name = item["name"]
+                        state = item.get("state", "")
+                        btn_id = f"playbook-{name}"
+                        if state == "pass":
+                            variant = "success"
+                            lbl = f"{name} [bold green](P)[/]"
+                        elif state == "fail":
+                            variant = "error"
+                            lbl = f"{name} [bold red](F)[/]"
+                        else:
+                            variant = "default"
+                            lbl = name
+                        btn = Button(label=lbl, id=btn_id, variant=variant,
+                                classes="workflow-btn")
+                        self.btn_map[btn_id] = item
+                        yield btn
         yield Static("", id="prep-status")
         yield ProgressBar(id="prep-progress", total=1.0, show_bar=True)
 
-        if "playbooks" in install_data:
-            yield Label("Playbooks", classes="title")
-            with Horizontal(id="playbooks_block"):
-                for item in install_data["playbooks"]:
-                    name = item["name"]
-                    is_done = "completed_at" in item
-
-                    btn_id = f"playbook-{name}"
-                    variant = "success" if is_done else "default"
-                    lbl = f"{name} (Done!)" if is_done else name
-
-                    btn = Button(label=lbl, id=btn_id, variant=variant)
-                    self.btn_map[btn_id] = item
-                    yield btn
 
     def run_playbook_task(self, button_widget: Button) -> None:
         # run playbook code here
-        self._complete_progress_tracker(button_widget)
+        pass
+        #self._complete_progress_tracker(button_widget)
 
-    def _complete_progress_tracker(self, button_widget: Button) -> None:
+    def _complete_progress_tracker(self,
+            button_widget: Button, is_success: bool = False) -> None:
         btn_id = button_widget.id
         if btn_id in self.btn_map:
             target_item = self.btn_map[btn_id]
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-            target_item["completed_at"] = current_time
+            target_item["cooked_at"] = current_time
+            target_item["state"] = "pass" if is_success else "fail"
 
             try:
                 with open(self.status_path, "w", encoding="utf-8") as f:
@@ -548,6 +597,7 @@ class Installer(VerticalScroll):
                         sort_keys=False
                     )
             except Exception as e:
-                logging.error(f"Failed to save cooking status: {e}")
+                logging.error(f"Failed to update cooking status: {e}")
 
-        self._update_button(button_widget, "success")
+        variant = "success" if is_success else "error"
+        self._update_button(button_widget, variant)
