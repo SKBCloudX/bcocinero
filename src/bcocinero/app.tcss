@@ -116,7 +116,8 @@ RadioButton {
 }
 #playbooks_block {
   layout: grid;
-  grid-size: 6 2;
+  grid-size: 6;
+  grid-rows: 1 1;
   grid-gutter: 0 0;
   height: auto;
   width: 100%;
@@ -135,4 +136,25 @@ RadioButton {
   height: 2fr;
   border: round $accent;
   margin: 0 0;
+}
+LogViewModal {
+  align: center top;
+  background: rgba(0, 0, 0, 0.6);
+}
+#modal-container {
+  width: 100%;
+  height: 80%;
+  background: $panel;
+  border: heavy $accent;
+  padding: 0 0;
+}
+.modal-title {
+  color: $text;
+  margin-bottom: 1;
+}
+#modal_log_window {
+  width: 100%;
+  height: 1fr;
+  margin-bottom: 1;
+  border: solid $background;
 }
