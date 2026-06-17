@@ -263,6 +263,10 @@ class LogViewModal(ModalScreen):
         with VerticalScroll(id="modal-container"):
             yield Label(f"Cooking: {self.log_title}", classes="modal-title")
             yield RichLog(id="modal_log_window", highlight=True, markup=True)
+            yield Static("", id="modal_playbook_status")
+            yield Label("Progress:", id="modal_progress_label")
+            yield ProgressBar(id="modal_playbook_progress",
+                    total=1.0, show_bar=True)
             yield Button("Close", id="close-modal-btn", variant="error")
 
     def on_mount(self):
@@ -412,6 +416,11 @@ class Installer(VerticalScroll):
             # process ntp servers
             ntp_val = processed_data.get("ntp_servers", None)
             processed_data["ntp_servers"] = [ntp_val] if ntp_val else []
+            # process upstream_dns_servers
+            dns_val = processed_data.get("upstream_dns_servers", None)
+            processed_data["upstream_dns_servers"] = (
+                [dns_val] if dns_val else ["8.8.8.8"]
+            )
             # process storage_backends 
             sb_val = processed_data.get("storage_backends", None)
             processed_data["storage_backends"] = [sb_val] if sb_val else []
@@ -547,23 +556,18 @@ class Installer(VerticalScroll):
 
     async def _execute_run_script(self, task_name: str,
             playbook_button: Button, bar: ProgressBar, status_lbl: Static,
-            prefix_msg: str = "") -> bool:
+            prefix_msg: str = "",
+            modal: Optional[LogViewModal] = None) -> bool:
         log_file_path = self.log_dir / f"{task_name}.log"
 
-        self._init_ui(playbook_button, bar)
-        
         total = self._get_playbook_task_count(task_name)
-        self._update_progress(
-            bar, status_lbl, 0.0, f"{prefix_msg}Initializing {task_name}..."
-        )
-
-        modal = LogViewModal(
-            title=f"{prefix_msg}{task_name}", log_path=log_file_path
-        )
-        self.app.push_screen(modal)
 
         is_success = False
         index = 0
+
+        self._update_progress(
+            bar, status_lbl, 0.0, f"{prefix_msg}Initializing {task_name}..."
+        )
 
         try:
             with open(log_file_path, "w", encoding="utf-8") as log_f:
@@ -656,12 +660,21 @@ class Installer(VerticalScroll):
     @work
     async def run_playbook(self, button_widget: Button) -> None:
         task_name = button_widget.id.split("-", 1)[-1]
-        bar = self.query_one("#prep-progress", ProgressBar)
-        status_lbl = self.query_one("#prep-status", Static)
+        log_file_path = self.log_dir / f"{task_name}.log"
 
-        is_success = await self._execute_run_script(
-            task_name, button_widget, bar, status_lbl
+        modal = LogViewModal(
+            title=f"{task_name}", log_path=log_file_path
         )
+        await self.app.push_screen(modal)
+        bar = modal.query_one("#modal_playbook_progress", ProgressBar)
+        status_lbl = modal.query_one("#modal_playbook_status", Static)
+        self._init_ui(button_widget, bar)
+    
+        is_success = await self._execute_run_script(
+            task_name, button_widget, bar, status_lbl,
+            "", modal=modal
+        )
+
         self._update_cooking_status(button_widget, is_success=is_success)
 
     @work
@@ -824,6 +837,10 @@ class Installer(VerticalScroll):
                     yield btn
                     self.btn_map[btn_id] = item
                     next_button_allowed = (state == "pass")
+
+        yield Static("", id="prep-status")
+        yield ProgressBar(id="prep-progress", total=1.0, show_bar=True)
+
         if "playbooks" in install_data:
             with VerticalScroll(classes="workflow-row"):
                 with Horizontal(classes="workflow-row"):
@@ -866,7 +883,3 @@ class Installer(VerticalScroll):
                         yield btn
                         self.btn_map[btn_id] = item
                         next_button_allowed = (state == "pass")
-        yield Static("", id="prep-status")
-        yield ProgressBar(id="prep-progress", total=1.0, show_bar=True)
-
-

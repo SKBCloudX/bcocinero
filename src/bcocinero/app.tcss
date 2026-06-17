@@ -111,15 +111,16 @@ RadioButton {
   margin: 0 0;
 }
 .workflow-row {
-  margin-bottom: 1;
+  margin-bottom: 0;
   align: left middle;
+  height: auto;
 }
 #playbooks_block {
   layout: grid;
   grid-size: 6;
   grid-rows: 1 1;
   grid-gutter: 0 0;
-  height: auto;
+  height: 2;
   width: 100%;
 }
 .row-header {
@@ -132,18 +133,13 @@ RadioButton {
   width: auto;
   height: 1;
 }
-#result_block {
-  height: 2fr;
-  border: round $accent;
-  margin: 0 0;
-}
 LogViewModal {
   align: center top;
   background: rgba(0, 0, 0, 0.6);
 }
 #modal-container {
   width: 100%;
-  height: 80%;
+  height: 100%;
   background: $panel;
   border: heavy $accent;
   padding: 0 0;

@@ -1,0 +1,101 @@
+variable:
+  title: "Global Configuration"
+  fields:
+    - name: keepalived_vip
+      label: KeepAlived VIP
+      type: input 
+      placeholder: Enter KeepAlived VIP address. 
+      default: ''
+    - name: metallb_ip 
+      label: MetalLB IP 
+      type: input 
+      placeholder: Enter MetalLB IP address. 
+      default: ''
+    - name: ntp_servers 
+      label: NTP Server IP 
+      type: input 
+      placeholder: Enter NTP Server IP address. 
+      default: '' 
+    - name: upstream_dns_servers 
+      label: Upstream DNS servers 
+      type: input 
+      placeholder: Enter DNS IP address. 
+      default: 8.8.8.8 
+    - name: kube_service_addresses 
+      label: K8S Service Subnet 
+      type: input 
+      placeholder: Enter Kubernetes Service Subnet address. 
+      default: 10.233.0.0/18 
+    - name: kube_pods_subnet 
+      label: K8S Pods Subnet 
+      type: input 
+      placeholder: Enter Kubernetes Pods Subnet address. 
+      default: 10.233.64.0/18 
+    - name: storage_backends 
+      label: Storage Backends 
+      type: select 
+      options: 
+        - ["ceph", "ceph"]
+        - ["netapp", "netapp"]
+      default: ceph 
+    - name: netapp_mgmt_lif 
+      label: NetApp Mgmt LIF 
+      type: input 
+      placeholder: Enter NetApp Management LIF IP. 
+      default: '' 
+    - name: netapp_user 
+      label: NetApp Username 
+      type: input 
+      placeholder: Enter NetApp Username. 
+      default: admin 
+    - name: netapp_pass 
+      label: NetApp Password 
+      type: password 
+      placeholder: Enter NetApp Password. 
+      default: '' 
+    - name: netapp_svm1 
+      label: NetApp SVM 1 
+      type: input 
+      placeholder: Enter the first SVM name. 
+      default: svm01 
+    - name: netapp_data_lif1 
+      label: NetApp DataLIF1
+      type: input
+      placeholder: Enter the first NetApp Data LIF IP.
+      default: ''
+    - name: netapp_shares1
+      label: NetApp Shares 1
+      type: input
+      placeholder: Enter the first NetApp Share name.
+      default: /dev1
+    - name: netapp_svm2 
+      label: NetApp SVM 2 
+      type: input 
+      placeholder: Enter the second SVM name. 
+      default: svm02 
+    - name: netapp_data_lif2 
+      label: NetApp DataLIF 2 
+      type: input 
+      placeholder: Enter the second NetApp Data LIF IP. 
+      default: '' 
+    - name: netapp_shares2 
+      label: NetApp Shares 2 
+      type: input 
+      placeholder: Enter the second NetApp Share name. 
+      default: /dev2
+install:
+  title: "Cooking Recipe"
+  preparations:
+    - name: "prep"
+    - name: "recipe"
+    - name: "vault"
+  playbooks:
+    - name: "preflight"
+    - name: "ha"
+    - name: "ceph"
+    - name: "k8s"
+    - name: "storage"
+    - name: "patch"
+    - name: "registry"
+    - name: "landing"
+    - name: "burrito"
