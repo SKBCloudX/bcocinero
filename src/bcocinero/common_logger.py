@@ -14,10 +14,8 @@ class TextualLogHandler(logging.Handler):
 
         if threading.current_thread() is threading.main_thread():
             self.app.post_log(msg, level)
-            self.app.write_status(msg)
         else:
             self.app.call_from_thread(self.app.post_log, msg, level)
-            self.app.call_from_thread(self.app.write_status, msg)
 
 class BcocineroLogger:
     def __init__(self, app, module_name="bcocinero"):

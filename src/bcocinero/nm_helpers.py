@@ -70,6 +70,7 @@ class NodeRole(Enum):
     CONTROL = "Control"
     COMPUTE = "Compute"
     STORAGE = "Storage"
+    SGW = "SGW"
     NONE = ""
 
     @property
@@ -159,6 +160,14 @@ class InventoryGenerator:
             if compute_nodes:
                 etcd_nodes.append(compute_nodes[0])
             lines.extend(etcd_nodes)
+
+        sgw_nodes = (
+            [h['hostname'] for h in self.hosts if h['role']  == NodeRole.SGW]
+        )
+        if len(sgw_nodes) > 0:
+            lines.append("\n[sgw_node]")
+            lines.extend(sgw_nodes)
+
         lines.append("")
 
         expert_section = """

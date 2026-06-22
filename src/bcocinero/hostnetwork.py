@@ -106,11 +106,11 @@ class ListVlan(Widget):
                 state = nm.delete_interface_state(vlan_name)
                 nm.apply_state(state)
                 
-                self.app.write_status(f"VLAN {vlan_name} is deleted.")
+                self.app.post_log(f"VLAN {vlan_name} is deleted.")
                 self.refresh_table()
                 self.app.refresh_dashboard_interface_table()
             except Exception as e:
-                self.app.write_status(f"Failed to delete: {e}")
+                self.app.post_log(f"Failed to delete: {e}", "ERROR")
 
 class VlanConfigScreen(ModalScreen[dict]):
     def __init__(self, d_vlan: Optional[dict] = None):

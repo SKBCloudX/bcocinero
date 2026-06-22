@@ -12,17 +12,6 @@ from bcocinero.dashboard import Dashboard
 from bcocinero.hostnetwork import HostNetwork
 from bcocinero.installer import Installer
 
-class StatusBar(Widget):
-    message = reactive("Ready")
-    display_msg = reactive("")
-
-    def watch_message(self, msg: str) -> None:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.display_msg = f"[{timestamp}] {msg}"
-
-    def render(self) -> str:
-        return f"{self.display_msg}"
-
 class BcocineroScreen(Screen):
     CSS_PATH = ["app.tcss"]
     BINDINGS = [
@@ -52,8 +41,6 @@ class BcocineroScreen(Screen):
                 yield Installer()
         yield RichLog(id="main_log", auto_scroll=True, markup=True,
                       highlight=True)
-        yield StatusBar(id="main_status_bar")
-        #yield self.footer
 
     def action_switch_tab(self, tab: str) -> None:
         self.query_one("#main", TabbedContent).active = tab
@@ -77,12 +64,6 @@ class Bcocinero(App):
             color = self.LEVEL_COLORS.get(level, "green")
             log_widget.write(f"{timestamp} [[bold {color}]{level}[/]] {msg}")
         except Exception:
-            pass
-
-    def write_status(self, msg: str) -> None:
-        try:
-            self.screen.query_one("#main_status_bar").message = msg
-        except NoMatches:
             pass
 
     def refresh_dashboard_interface_table(self):

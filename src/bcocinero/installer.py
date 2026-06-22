@@ -9,13 +9,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from rich.markup import escape
-from textual import work
+from textual import on, work
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import (
-    Button, DataTable, Input, Select, Label, ProgressBar, RichLog, Static
+    Button, DataTable, Input, Select, Label, ProgressBar,
+    RichLog, Static, TextArea
 )
 
 from bcocinero.nm_helpers import (
@@ -79,9 +80,42 @@ class ListHost(Widget):
 
         gen = InventoryGenerator(self.db_hostdata)
         gen.generate(f"{install_root_dir}/hosts")
-        self.logger.info(
-            f"Created an inventory file: {install_root_dir}/hosts"
-        )
+
+class InventoryViewModal(ModalScreen[None]):
+    def __init__(self, list_host_obj: ListHost):
+        super().__init__()
+        self.logger = logging.getLogger("bcocinero")
+        self.list_host_obj = list_host_obj
+
+    def compose(self) -> ComposeResult:
+        with Container(id="modal-container"):
+            yield Label("Inventory view", classes="modal-title")
+            yield TextArea(
+                id="inventory_textarea",
+                read_only=True,
+                show_line_numbers=True,
+            )
+            yield Button("Close", variant="error", 
+                         id="close_modal_btn", classes="workflow-btn")
+
+    def on_mount(self) -> None:
+        s_inventory = ""
+        textarea = self.query_one("#inventory_textarea", TextArea)
+        textarea.language = "toml"
+        try:
+            self.list_host_obj.create_inventory("/tmp")
+            with open("/tmp/hosts", "r", encoding="utf-8") as f:
+                s_inventory = f.read()
+            os.unlink("/tmp/hosts")
+        except Exception as e:
+            s_inventory = f"Failed to create inventory: {e}"
+            self.logger.error(s_inventory)
+
+        textarea.text = s_inventory
+
+    @on(Button.Pressed, "#close_modal_btn")
+    def close_modal(self) -> None:
+        self.dismiss()
 
 class RecipeModal(ModalScreen[dict]):
     def __init__(self, recipe_path: str, recipe_saved_path: str):
@@ -312,7 +346,7 @@ class Installer(VerticalScroll):
             with open(target_path, "r", encoding="utf-8") as f:
                 self.workflow_data = yaml.safe_load(f) or {}
         except Exception as e:
-            logging.error(f"Failed to load the original recipe: {e}")
+            logging.warning(f"Failed to load the original recipe: {e}")
             self.workflow_data = {
                 "install": {"preparations": [], "playbooks": []}
             }
@@ -331,18 +365,16 @@ class Installer(VerticalScroll):
 
     def _update_button(self,
             btn: Button, variant: str = "default", cooked_at: str = "") -> None:
-        orig_name = btn.id.split("-", 1)[-1]
+        cook_msg = ""
         if variant == "success":
-            btn.label = f"{orig_name}[bold green](P)[/]"
+            cook_msg = "Cooked right at"
         elif variant == "error":
-            btn.label = f"{orig_name}[bold red](F)[/]"
-        else:
-            btn.label = orig_name
+            cook_msg = "Cooked wrong at"
         btn.variant = variant
         btn.disabled = False
 
         btn.tooltip = (
-            f"Cooked at: {cooked_at}"
+            f"{cook_msg}: {cooked_at}"
             if variant in ["success", "error"] and cooked_at
             else None
         )
@@ -573,6 +605,7 @@ class Installer(VerticalScroll):
             with open(log_file_path, "w", encoding="utf-8") as log_f:
                 process = await asyncio.create_subprocess_exec(
                     "./run.sh", task_name,
+                    stdin=asyncio.subprocess.DEVNULL,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.STDOUT,
                     cwd=self.install_root_dir
@@ -630,6 +663,10 @@ class Installer(VerticalScroll):
 
         if btn_id == "hosts-refresh":
             self.query_one(ListHost).refresh_table()
+        elif btn_id == "inventory-view":
+            o_list_host = self.query_one(ListHost)
+            self.modal_screen = InventoryViewModal(o_list_host)
+            self.app.push_screen(self.modal_screen)
         elif btn_id == "installer-prep":
             self.run_prep_task()
         elif btn_id == "installer-recipe":
@@ -819,19 +856,18 @@ class Installer(VerticalScroll):
                     cooked_at = item.get("cooked_at", "")
                     btn_id = f"installer-{name}"
                     if state == "pass":
+                        cook_msg = "Cooked right at"
                         variant = "success"
-                        lbl = f"{name}[bold green](P)[/]"
                     elif state == "fail":
+                        cook_msg = "Cooked wrong at"
                         variant = "error"
-                        lbl = f"{name}[bold red](F)[/]"
                     else:
                         variant = "default"
-                        lbl = name
-                    btn = Button(label=lbl, id=btn_id, variant=variant,
+                    btn = Button(label=name, id=btn_id, variant=variant,
                             classes="workflow-btn")
                     btn.disabled = not next_button_allowed
                     btn.tooltip = (
-                        f"Cooked at: {cooked_at}" if state and cooked_at
+                        f"{cook_msg}: {cooked_at}" if state and cooked_at
                         else None
                     )
                     yield btn
@@ -865,19 +901,18 @@ class Installer(VerticalScroll):
                         cooked_at = item.get("cooked_at", "")
                         btn_id = f"playbook-{name}"
                         if state == "pass":
+                            cook_msg = "Cooked right at"
                             variant = "success"
-                            lbl = f"{name}[bold green](P)[/]"
                         elif state == "fail":
+                            cook_msg = "Cooked wrong at"
                             variant = "error"
-                            lbl = f"{name}[bold red](F)[/]"
                         else:
                             variant = "default"
-                            lbl = name
-                        btn = Button(label=lbl, id=btn_id, variant=variant,
+                        btn = Button(label=name, id=btn_id, variant=variant,
                                 classes="workflow-btn")
                         btn.disabled = not next_button_allowed
                         btn.tooltip = (
-                            f"Cooked at: {cooked_at}" if state and cooked_at
+                            f"{cook_msg}: {cooked_at}" if state and cooked_at
                             else None
                         )
                         yield btn

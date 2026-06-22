@@ -3,10 +3,14 @@ import logging
 import re
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import (
+    Container, Horizontal, HorizontalScroll, Vertical, VerticalScroll
+)
 from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import Button, DataTable, Input, Label, Select, Switch
+from textual.widgets import (
+    Button, DataTable, Input, Label, Select, Static, Switch
+)
 from typing import Optional, Dict, Any, List
 
 from bcocinero.nm_helpers import (
@@ -15,6 +19,7 @@ from bcocinero.nm_helpers import (
     ProfileType,
     NodeRole
 )
+from bcocinero.install_tracker import InstallTracker
 
 _HOSTNAME_RE = re.compile(
     r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$"
@@ -235,4 +240,23 @@ class Dashboard(VerticalScroll):
             yield ListInterface()
         with Vertical(classes="dashboard_installer"):
             yield Label("Installer", classes="title")
+            with Container(id="dashboard_installer_status_block"):
+                with Horizontal():
+                    yield Static("", id="prep_progress_view", markup=True)
+                with HorizontalScroll():
+                    yield Static("", id="cook_progress_view", markup=True)
 
+    def on_mount(self) -> None:
+        interval = 10.0
+        self.tracker = InstallTracker()
+        self._update_installation_progress()
+        self.set_interval(interval, self._update_installation_progress)
+
+    def _update_installation_progress(self) -> None:
+        prep_markup, cook_markup = self.tracker.get_progress_markup()
+
+        try:
+            self.query_one("#prep_progress_view", Static).update(prep_markup)
+            self.query_one("#cook_progress_view", Static).update(cook_markup)
+        except Exception:
+            pass

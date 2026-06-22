@@ -8,27 +8,25 @@ Button {
   margin-right: 1;
   padding: 0 0;
 }
-StatusBar {
-  dock: bottom;
-  height: 1;
-  background: $accent;
-  color: $text;
+.title {
+  text-style: bold;
+  color: $accent;
 }
 #confirm_dialog {
-    grid-size: 2;
-    grid-gutter: 1;
-    grid-rows: 1fr 3;
-    padding: 1 2;
-    width: 40;
-    height: 11;
-    border: thick $primary;
-    background: $surface;
-    align: center middle;
+  grid-size: 2;
+  grid-gutter: 1;
+  grid-rows: 1fr 3;
+  padding: 1 2;
+  width: 40;
+  height: 11;
+  border: thick $primary;
+  background: $surface;
+  align: center middle;
 }
 #confirm {
-    column-span: 2;
-    height: 1fr;
-    content-align: center middle;
+  column-span: 2;
+  height: 1fr;
+  content-align: center middle;
 }
 #vlan_list_widget, #bond_list_widget { 
   height: 1fr;
@@ -40,14 +38,35 @@ Horizontal {
   align: left middle;
 }
 .dashboard_hostname {
-  height: 1fr;
+  dock: top;
+  height: 2;
 }
 .dashboard_interface {
-  height: 4fr;
+  height: 1fr;
+  min-height: 6;
+  overflow-y: hidden;
+}
+.dashboard_interface DataTable {
+  height: 100%;
   overflow-y: auto;
+  margin-bottom: 1;
 }
 .dashboard_installer {
-  height: 1fr;
+  dock: bottom;
+  height: 6;
+  min-height: 5;
+  overflow-y: hidden;
+}
+#dashboard_installer_status_block {
+  margin-top: 0;
+  padding: 0;
+  background: $surface;
+  border: none;
+  height: 100%;
+}
+#prep_progress_view, #cook_progress_view {
+  margin-bottom: 1;
+  width: auto;
 }
 Input {
   width: auto;
@@ -90,6 +109,7 @@ RadioButton {
 #list_interface_table {
   height: 15;
   min-height: 10;
+  border: round $accent;
 }
 #hc_ip_container {
   display: none;
@@ -125,7 +145,7 @@ RadioButton {
 }
 .row-header {
   width: 5;
-  color: $accent;
+  text-style: bold;
 }
 .workflow-btn {
   margin: 0 1;
