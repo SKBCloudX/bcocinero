@@ -688,6 +688,52 @@ class Installer(VerticalScroll):
             self.run_playbook(event.button)
 
     @work
+    async def run_cook_all(self, btn: Button) -> None:
+        install_data = self.workflow_data.get("install", {})
+        playbooks = install_data.get("playbooks", [])
+
+        if not playbooks:
+            logging.warning("No playbooks found.")
+            return
+
+        logging.info("Starting [Cook All] workflow...")
+
+        for item in playbooks:
+            name = item.get("name")
+            state = item.get("state", "")
+            btn_id = f"playbook-{name}"
+
+            if state == "pass":
+                logging.info(f"[Cook All] Skipping playbook '{name}'")
+                continue
+
+            logging.info(f"[Cook All] Next playbook: {name}")
+
+            try:
+                playbook_btn = self.query_one(f"#{btn_id}", Button)
+                worker = self.run_playbook(playbook_btn)
+                await worker.wait()
+
+                if isinstance(self.app.screen, LogViewModal):
+                    await self.app.pop_screen()
+
+                current_state = item.get("state", "")
+
+                if current_state == "fail":
+                    logging.error(f"[Cook All] playbook '{name}' failed.")
+                    break
+                elif current_state != "pass":
+                    logging.warning(
+                        f"[Cook All] playbook '{name}' interrupted."
+                    )
+                    break
+            except Exception as e:
+                logging.error(f"[Cook All] playbook '{name}' exception: {e}")
+                break
+        logging.info("[Cook All] finished.")
+        btn.disabled = False
+
+    @work
     async def run_playbook(self, button_widget: Button) -> None:
         task_name = button_widget.id.split("-", 1)[-1]
         log_file_path = self.log_dir / f"{task_name}.log"
