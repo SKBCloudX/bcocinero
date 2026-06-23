@@ -649,13 +649,6 @@ class Installer(VerticalScroll):
         return is_success
 
 
-    async def _sync_execute_allinone(self,
-            task_name: str, playbook_button: Button,
-            bar: ProgressBar, status_lbl: Static) -> bool:
-        return await self._execute_run_script(
-            task_name, playbook_button, bar, status_lbl, prefix_msg="[Cook] "
-        )
-
     def on_button_pressed(self, event: Button.Pressed) -> None:
         btn_id = event.button.id
         if not btn_id:
@@ -690,7 +683,7 @@ class Installer(VerticalScroll):
             self.app.push_screen(self.modal_screen, self.handle_save_vault)
         elif btn_id == "cook-all":
             event.button.disabled = True
-            self.run_allinone_cooking(event.button)
+            self.run_cook_all(event.button)
         elif btn_id.startswith("playbook-"):
             self.run_playbook(event.button)
 
@@ -713,50 +706,6 @@ class Installer(VerticalScroll):
         )
 
         self._update_cooking_status(button_widget, is_success=is_success)
-
-    @work
-    async def run_allinone_cooking(self, allinone_button: Button) -> None:
-        install_data = self.workflow_data.get("install", {})
-        if "playbooks" not in install_data:
-            self.app.call_from_thread(
-                setattr, allinone_button, "disabled", False
-            )
-            return
-
-        self.app.call_from_thread(
-            setattr, allinone_button, "variant", "primary"
-        )
-
-        bar = self.query_one("#prep-progress", ProgressBar)
-        status_lbl = self.query_one("#prep-status", Static)
-
-        for item in install_data["playbooks"]:
-            name = item["name"]
-            btn_id = f"playbook-{name}"
-
-            if item.get("state") == "pass":
-                continue
-
-            try:
-                playbook_button = self.query_one(f"#{btn_id}", Button)
-
-                success = await self._sync_execute_allinone(
-                    name, playbook_button, bar, status_lbl)
-
-                if not success:
-                    allinone_button.variant = "error"
-                    allinone_button.label = "Cook(F)"
-                    allinone_button.disabled = False
-                    return
-            except Exception as e:
-                logging.error(f"Failed at playbook [{name}]: {e}")
-                allinone_button.variant = "error"
-                allinone_button.disabled = False
-                return
-
-        allinone_button.variant = "success"
-        allinone_button.label = "Cook(P)"
-        allinone_button.disabled = False
 
     @work(exclusive=True, thread=True)
     async def run_prep_task(self) -> None:
