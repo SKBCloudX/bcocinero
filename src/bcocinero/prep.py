@@ -40,17 +40,27 @@ class Prep:
         logging.info(f"Running command: {command}")
         log_file_path = Path.home() / ".local" / "bcocinero" / "bcocinero.log"
         try:
-            with open(log_file_path, "a", encoding="utf-8") as f:
-                return subprocess.run(
+            p = subprocess.Popen(
                     command,
                     shell=True,
                     cwd=cwd,
-                    check=True,
-                    stdout=f,
-                    stderr=f
-                )
-        except subprocess.CalledProcessError as e:
-            logging.error(f"Command failed with exit code {e.returncode}.")
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8"
+            )
+            if p.stdout:
+                for line in p.stdout:
+                    s_line = line.strip()
+                    if s_line:
+                        logging.debug(s_line)
+
+            p.wait()
+
+            if p.returncode != 0:
+                raise subprocess.CalledProcessError(p.returncode, command)
+        except Exception as e:
+            logging.error(f"Command failed: {e}")
             raise
 
     def is_already_mounted(self) -> bool:

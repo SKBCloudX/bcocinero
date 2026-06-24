@@ -814,12 +814,9 @@ class Installer(VerticalScroll):
 
         try:
             vault_engine = VaultManager(self.install_root_dir)
-            vault_engine.generate_vault_files(data)
-            logging.info("Vault process is completed successfully.")
-            is_success = True
+            is_success = vault_engine.create_vault(data)
         except Exception as e:
-            logging.error(f"Failed to execute vault tasks: {e}")
-            is_success = False
+            logging.error(f"Failed to create vault: {e}")
 
         self._update_cooking_status(btn, is_success)
 

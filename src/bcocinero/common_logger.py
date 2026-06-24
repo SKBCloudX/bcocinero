@@ -23,11 +23,13 @@ class BcocineroLogger:
         self.module_name = module_name
         self.log_dir = Path.home() / ".local" / "bcocinero"
         self.log_file = self.log_dir / f"{module_name}.log"
+        self.debug_log_file = self.log_dir / f"{module_name}_debug.log"
 
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
         self.logger = logging.getLogger()
-        self.logger.setLevel(logging.INFO)
+        self.logger.setLevel(logging.DEBUG)
+
         for handler in self.logger.handlers[:]:
             self.logger.removeHandler(handler)
 
@@ -42,11 +44,20 @@ class BcocineroLogger:
             str(self.log_file), mode="a", encoding="utf-8"
         )
         file_handler.setFormatter(file_formatter)
+        file_handler.setLevel(logging.INFO)
         self.logger.addHandler(file_handler)
+
+        debug_file_handler = logging.FileHandler(
+            str(self.debug_log_file), mode="a", encoding="utf-8"
+        )
+        debug_file_handler.setFormatter(file_formatter)
+        debug_file_handler.setLevel(logging.DEBUG)
+        self.logger.addHandler(debug_file_handler)
         
         textual_formatter = logging.Formatter('%(message)s')
         textual_handler = TextualLogHandler(self.app)
         textual_handler.setFormatter(textual_formatter)
+        textual_handler.setLevel(logging.INFO)
         self.logger.addHandler(textual_handler)
 
     def load_prev_logs(self, count: int = 3):

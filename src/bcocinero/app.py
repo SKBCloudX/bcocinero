@@ -24,7 +24,7 @@ class BcocineroScreen(Screen):
     def action_clear_logs(self) -> None:
         try:
             self.query_one("#main_log", RichLog).clear()
-            logging.info("Clear log display by user.")
+            logging.info("Cleared logs.")
         except Exception:
             pass
 
