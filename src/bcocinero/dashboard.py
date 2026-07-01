@@ -179,6 +179,10 @@ class HostConfigScreen(ModalScreen[dict]):
             self.dismiss(None)
 
 class Dashboard(VerticalScroll):
+    def __init__(self) -> None:
+        super().__init__()
+        self.tracker = None
+
     def save_hostconfig(self, result: Optional[Dict[str, str]]) -> None:
         if not result:
             return
@@ -274,11 +278,13 @@ class Dashboard(VerticalScroll):
             elif not is_head and self.tracker is not None:
                 self.tracker = None
         except Exception:
+            logging.error("Failed to set installer block visibility")
             pass
 
     def _update_installation_progress(self) -> None:
         try:
-            if not self.query_one("#dashboard_installer_container").display or self.tracker is None:
+            container = self.query_one("#dashboard_installer_container")
+            if not container.display or self.tracker is None:
                 return
         except Exception:
             return
