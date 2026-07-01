@@ -326,7 +326,7 @@ class Installer(VerticalScroll):
     def __init__(self):
         super().__init__()
         self.install_root_dir = am.get_install_root()
-        self.home_dir = Path(self.install_root_dir).parent
+        self.home_dir = Path.home()
         self.log_dir = self.home_dir / ".local" / "bcocinero"
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.modal_screen = None

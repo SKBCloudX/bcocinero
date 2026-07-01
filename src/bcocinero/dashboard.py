@@ -1,6 +1,9 @@
+# src/bcocinero/dashboard.py
+import os
+import re
 import ipaddress
 import logging
-import re
+from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.containers import (
@@ -9,7 +12,7 @@ from textual.containers import (
 from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import (
-    Button, DataTable, Input, Label, Select, Static, Switch
+    Button, DataTable, Header, Input, Label, RichLog, Select, Static, Switch
 )
 from typing import Optional, Dict, Any, List
 
@@ -260,3 +263,6 @@ class Dashboard(VerticalScroll):
             self.query_one("#cook_progress_view", Static).update(cook_markup)
         except Exception:
             pass
+
+    def action_view_playbook_log(self, playbook_name: str) -> None:
+        self.app.push_screen(PlaybookLogScreen(playbook_name))
