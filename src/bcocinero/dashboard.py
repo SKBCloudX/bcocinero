@@ -209,6 +209,10 @@ class Dashboard(VerticalScroll):
             hostname_widget.nameserver = result["nameserver"]
             hostname_widget.role = result["role"]
 
+            self._toggle_installer_visibility(result["role"])
+            if hasattr(self.app.screen, "update_tabs_visibility"):
+                self.app.screen.update_tabs_visibility()
+
             logging.info("Configured host information")
         except Exception as e:
             logging.error(f"Failed to configure: {str(e)}")
@@ -238,7 +242,8 @@ class Dashboard(VerticalScroll):
         with Vertical(classes="dashboard_interface"):
             yield Label("Interfaces", classes="title")
             yield ListInterface()
-        with Vertical(classes="dashboard_installer"):
+        with Vertical(id="dashboard_installer_container",
+                      classes="dashboard_installer"):
             yield Label("Installer", classes="title")
             with Container(id="dashboard_installer_status_block"):
                 with Horizontal():
@@ -248,11 +253,33 @@ class Dashboard(VerticalScroll):
 
     def on_mount(self) -> None:
         interval = 10.0
-        self.tracker = InstallTracker()
+
+        host_data = nm.get_host_info()
+        self._toggle_installer_visibility(host_data.get("role",""))
+
         self._update_installation_progress()
         self.set_interval(interval, self._update_installation_progress)
 
+    def _toggle_installer_visibility(self, role: str) -> None:
+        try:
+            container = self.query_one("#dashboard_installer_container")
+            is_head = (role == NodeRole.HEAD.value)
+            container.display = is_head
+            
+            if is_head and self.tracker is None:
+                self.tracker = InstallTracker()
+            elif not is_head and self.tracker is not None:
+                self.tracker = None
+        except Exception:
+            pass
+
     def _update_installation_progress(self) -> None:
+        try:
+            if not self.query_one("#dashboard_installer_container").display or self.tracker is None:
+                return
+        except Exception:
+            return
+
         prep_markup, cook_markup = self.tracker.get_progress_markup()
 
         try:
