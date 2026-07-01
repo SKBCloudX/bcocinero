@@ -332,16 +332,21 @@ class Installer(VerticalScroll):
         self.modal_screen = None
 
     def _init_workflow(self) -> None:
-        self.config_path = Path(self.install_root_dir) / "recipe.yml"
-        self.status_path = (
-            self.config_path.parent / f".{self.config_path.name}"
-        )
+        if self.install_root_dir:
+            self.config_path = Path(self.install_root_dir) / "recipe.yml"
+            self.status_path = (
+                self.config_path.parent / f".{self.config_path.name}"
+            )
+            target_path = (
+                self.status_path if self.status_path.exists() else self.config_path
+            )
+        else:
+            self.config_path = None
+            self.status_path = None
+            target_path = None
         self.workflow_data = {}
         self.btn_map = {}
         
-        target_path = (
-            self.status_path if self.status_path.exists() else self.config_path
-        )
         try:
             with open(target_path, "r", encoding="utf-8") as f:
                 self.workflow_data = yaml.safe_load(f) or {}

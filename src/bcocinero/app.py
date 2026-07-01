@@ -12,6 +12,11 @@ from bcocinero.dashboard import Dashboard
 from bcocinero.hostnetwork import HostNetwork
 from bcocinero.installer import Installer
 
+from bcocinero.nm_helpers import (
+    NetworkManager,
+    NodeRole
+)
+
 class BcocineroScreen(Screen):
     CSS_PATH = ["app.tcss"]
     BINDINGS = [
@@ -37,17 +42,47 @@ class BcocineroScreen(Screen):
                 yield Dashboard()
             with TabPane("[red][b]N[/b][/red]etwork", id="network"):
                 yield HostNetwork()
-            with TabPane("[red][b]I[/b][/red]nstaller", id="installer"):
-                yield Installer()
         yield RichLog(id="main_log", auto_scroll=True, markup=True,
                       highlight=True)
 
     def action_switch_tab(self, tab: str) -> None:
-        self.query_one("#main", TabbedContent).active = tab
+        try:
+            tabbed_content = self.query_one("#main", TabbedContent)
+            if tab == "installer" and not tabbed_content.get_pane("installer"):
+                return
+            tabbed_content.active = tab
+        except Exception:
+            pass
 
     def on_mount(self) -> None:
         if hasattr(self.app, "bc_logger"):
             self.set_timer(0.5, lambda: self.app.bc_logger.load_prev_logs(3))
+        self.update_tabs_visibility()
+
+    def update_tabs_visibility(self) -> None:
+        try:
+            nm = NetworkManager()
+            host_data = nm.get_host_info()
+            tabbed_content = self.query_one("#main", TabbedContent)
+
+            is_head_control = (host_data.get("role") == NodeRole.HEAD.value)
+            try:
+                tabbed_content.get_pane("installer")
+                has_installer_pane = True
+            except Exception:
+                has_installer_pane = False
+
+            if is_head_control and not has_installer_pane:
+                new_pane = TabPane(
+                    "[red][b]I[/b][/red]nstaller", Installer(), id="installer"
+                )
+                tabbed_content.add_pane(new_pane)
+            elif not is_head_control and has_installer_pane:
+                if tabbed_content.active == "installer":
+                    tabbed_content.active = "dashboard"
+                tabbed_content.remove_pane("installer")
+        except Exception as e:
+            logging.error(f"Failed to update tab visibility layout: {str(e)}")
 
 class Bcocinero(App):
     """Burrito Chef"""
