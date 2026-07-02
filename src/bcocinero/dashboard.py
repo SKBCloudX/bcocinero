@@ -1,9 +1,12 @@
 # src/bcocinero/dashboard.py
+import asyncio
+import inspect
 import os
 import re
 import ipaddress
 import logging
 from pathlib import Path
+from rich.markup import escape
 from textual.app import App, ComposeResult
 from textual.reactive import reactive
 from textual.containers import (
@@ -12,7 +15,8 @@ from textual.containers import (
 from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import (
-    Button, DataTable, Header, Input, Label, RichLog, Select, Static, Switch
+    Button, DataTable, Header, Input, Label,
+    OptionList, RichLog, Select, Static, Switch
 )
 from typing import Optional, Dict, Any, List
 
@@ -91,6 +95,36 @@ class ListInterface(Widget):
         self.l_interface = nm.list_interfaces()
         self._add_rows(table)
 
+class PlaybookLogScreen(ModalScreen):
+    def __init__(self, playbook_name: str) -> None:
+        super().__init__()
+        self.playbook_name = playbook_name
+        self.log_path = am.base_dir / f"{playbook_name}.log"
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="modal-container"):
+            yield Label(f"Cooked: {self.playbook_name}", classes="title")
+            yield RichLog(id="log_viewer", classes="modal-log-window",
+                          highlight=True, markup=True)
+            yield Button("Close", id="close_log_modal", variant="error")
+
+    def on_mount(self) -> None:
+        log_viewer = self.query_one("#log_viewer", RichLog)
+        if not self.log_path.exists():
+            log_viewer.write(f"Error: Log file not found: {self.log_path}.")
+            return
+
+        try:
+            with open(self.log_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    log_viewer.write(escape(line.rstrip()))
+        except Exception as e:
+            log_viewer.write(f"Failed to read log file: {str(e)}")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "close_log_modal":
+            self.dismiss()
+
 class HostConfigScreen(ModalScreen[dict]):
     def __init__(self,
                  s_hostname: str,
@@ -109,7 +143,7 @@ class HostConfigScreen(ModalScreen[dict]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="modal_container"):
-            yield Label("Host Configuration", classes="modal_title")
+            yield Label("Host Configuration", classes="title")
             with Horizontal():
                 yield Label("Hostname: ", classes="label-fixed")
                 yield Input(value=self.init_hostname, id="hn")
@@ -237,6 +271,10 @@ class Dashboard(VerticalScroll):
                 ),
                 self.save_hostconfig
             )
+        elif event.button.id and event.button.id.startswith("log_btn_"):
+            playbook_name = getattr(event.button, "playbook_name", "")
+            if playbook_name:
+                self.app.push_screen(PlaybookLogScreen(playbook_name))
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dashboard_hostname"):
@@ -255,16 +293,21 @@ class Dashboard(VerticalScroll):
             with Container(id="dashboard_installer_status_block"):
                 with Horizontal():
                     yield Static("", id="prep_progress_view", markup=True)
-                with HorizontalScroll():
-                    yield Static("", id="cook_progress_view", markup=True)
+                with Horizontal(id="installer_buttons_container"):
+                    pass
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         interval = 10.0
 
         host_data = nm.get_host_info()
         self._toggle_installer_visibility(host_data.get("role",""))
+        await asyncio.sleep(0)
 
-        self._update_installation_progress()
+        if inspect.iscoroutinefunction(self._update_installation_progress):
+            await self._update_installation_progress()
+        else:
+            self._update_installation_progress()
+
         self.set_interval(interval, self._update_installation_progress)
 
     def _toggle_installer_visibility(self, role: str) -> None:
@@ -281,7 +324,7 @@ class Dashboard(VerticalScroll):
             logging.error("Failed to set installer block visibility")
             pass
 
-    def _update_installation_progress(self) -> None:
+    async def _update_installation_progress(self) -> None:
         try:
             container = self.query_one("#dashboard_installer_container")
             if not container.display or self.tracker is None:
@@ -289,13 +332,55 @@ class Dashboard(VerticalScroll):
         except Exception:
             return
 
-        prep_markup, cook_markup = self.tracker.get_progress_markup()
+        prep_markup = self.tracker.get_prep_status()
+        cook_status = self.tracker.get_playbooks_status()
 
         try:
             self.query_one("#prep_progress_view", Static).update(prep_markup)
-            self.query_one("#cook_progress_view", Static).update(cook_markup)
         except Exception:
             pass
 
-    def action_view_playbook_log(self, playbook_name: str) -> None:
-        self.app.push_screen(PlaybookLogScreen(playbook_name))
+        try:
+            btn_container = self.query_one("#installer_buttons_container")
+
+            focused_id = None
+            c_focus = self.app.focused
+            if c_focus is not None and str(c_focus.id).startswith("log_btn_"):
+                focused_id = c_focus.id
+
+            btn_container.remove_children()
+            await asyncio.sleep(0)
+
+            if not cook_status:
+                btn_container.mount(
+                    Label("[yellow]Cook: It has not been cooked.[/]")
+                )
+                return
+
+            btn_container.mount(Label("[bold]Cook:[/]"))
+            for name, state in cook_status:
+                button_id = f"log_btn_{name}"
+                label = name
+                if state == "pass":
+                    variant = "success"
+                    disabled = False
+                elif state == "fail":
+                    variant = "error"
+                    disabled = False
+                else:
+                    variant = "default"
+                    disabled = True
+                btn = Button(label, id=button_id, variant=variant)
+                btn.disabled = disabled
+                btn.playbook_name = name
+                btn_container.mount(btn)
+
+            if focused_id:
+                try:
+                    new_btn = btn_container.query_one(f"#{focused_id}")
+                    if not new_btn.disabled:
+                        new_btn.focus()
+                except Exception:
+                    pass
+        except Exception as e:
+            logging.error(f"Fail to update installer block: {e}")

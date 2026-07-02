@@ -88,8 +88,8 @@ class InventoryViewModal(ModalScreen[None]):
         self.list_host_obj = list_host_obj
 
     def compose(self) -> ComposeResult:
-        with Container(id="modal-container"):
-            yield Label("Inventory view", classes="modal-title")
+        with Container(classes="modal-container"):
+            yield Label("Inventory view", classes="title")
             yield TextArea(
                 id="inventory_textarea",
                 read_only=True,
@@ -156,7 +156,7 @@ class RecipeModal(ModalScreen[dict]):
                     yield Button("Close", variant="error", id="cancel-btn")
                 return
 
-            yield Label(self.recipe_data.get("title"), id="recipe-title")
+            yield Label(self.recipe_data.get("title"), classes="title")
             with VerticalScroll(id="form-body"):
                 for field in self.recipe_data.get("fields", []):
                     is_netapp = field["name"].startswith("netapp_")
@@ -252,7 +252,7 @@ class VaultModal(ModalScreen[dict]):
 
     def compose(self) -> ComposeResult:
         with VerticalScroll(id="vault-modal-dialog"):
-            yield Label("Vault (Secret Cabinet) Config", id="vault-title")
+            yield Label("Vault (Secret Cabinet) Config", classes="title")
             with VerticalScroll():
                 fields = [
                     {"label": "User Password",
@@ -294,9 +294,10 @@ class LogViewModal(ModalScreen):
         self.log_path = log_path
 
     def compose(self):
-        with VerticalScroll(id="modal-container"):
-            yield Label(f"Cooking: {self.log_title}", classes="modal-title")
-            yield RichLog(id="modal_log_window", highlight=True, markup=True)
+        with VerticalScroll(classes="modal-container"):
+            yield Label(f"Cooking: {self.log_title}", classes="title")
+            yield RichLog(id="modal_log_window", classes="modal-log-window",
+                          highlight=True, markup=True)
             yield Static("", id="modal_playbook_status")
             yield Label("Progress:", id="modal_progress_label")
             yield ProgressBar(id="modal_playbook_progress",
@@ -631,7 +632,7 @@ class Installer(VerticalScroll):
                         pratio = min(index / total, 0.99)
                         self._update_progress(
                             bar, status_lbl, pratio, 
-                            f"{prefix_msg}{task_name}: {index}/{total} Tasks"
+                            f"{prefix_msg}{task_name}: processed {index} Tasks"
                         )
                 await process.wait()
                 is_success = (process.returncode == 0)
@@ -861,7 +862,7 @@ class Installer(VerticalScroll):
                     else:
                         variant = "default"
                     btn = Button(label=name, id=btn_id, variant=variant,
-                            classes="workflow-btn")
+                                 classes="workflow-btn")
                     btn.disabled = not next_button_allowed
                     btn.tooltip = (
                         f"{cook_msg}: {cooked_at}" if state and cooked_at

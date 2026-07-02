@@ -53,20 +53,35 @@ Horizontal {
 }
 .dashboard_installer {
   dock: bottom;
-  height: 6;
-  min-height: 5;
+  height: 4;
   overflow-y: hidden;
 }
 #dashboard_installer_status_block {
   margin-top: 0;
   padding: 0;
-  background: $surface;
   border: none;
   height: 100%;
 }
-#prep_progress_view, #cook_progress_view {
-  margin-bottom: 1;
+#prep_progress_view {
+  margin-bottom: 0;
   width: auto;
+}
+#installer_buttons_container {
+  height: auto;
+  align: left middle;
+}
+#installer_buttons_container Button {
+  margin-right: 0;
+  min-width: 4;
+  padding: 0 0;
+  border: none;
+  background: transparent;
+}
+#installer_buttons_container Button.-success {
+  color: green;
+}
+#installer_buttons_container Button.-error {
+  color: red;
 }
 Input {
   width: auto;
@@ -75,10 +90,10 @@ Input {
 Label {
   padding: 0 0;
 }
-#edit_lock_label {
+.edit_lock_label {
   color: red;
   padding: 1 1;
-  text_style: bold italic;
+  text-style: bold italic;
 }
 .label-fixed {
   width: 18;                  
@@ -86,7 +101,7 @@ Label {
   padding-right: 2;         
   color: $text-muted;      
 }
-#mode_list {
+#bond_mode_list {
   layout: grid;
   grid-size: 3;
   grid-columns: 1fr 1fr 1fr;
@@ -120,13 +135,13 @@ RadioButton {
 #main_log {
   dock: bottom;
   height: 5;
-  background: $surface;
   border-top: tall $accent;
   color: $text;
 }
 #host_list_widget {
-  height: 7;
-  min-height: 5;
+  height: auto;
+  max-height: 7;
+  min-height: 3;
   border: round $accent;
   margin: 0 0;
 }
@@ -157,18 +172,14 @@ LogViewModal {
   align: center top;
   background: rgba(0, 0, 0, 0.6);
 }
-#modal-container {
+.modal-container {
   width: 100%;
   height: 100%;
   background: $panel;
   border: heavy $accent;
   padding: 0 0;
 }
-.modal-title {
-  color: $text;
-  margin-bottom: 1;
-}
-#modal_log_window {
+.modal-log-window {
   width: 100%;
   height: 1fr;
   margin-bottom: 1;

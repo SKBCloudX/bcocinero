@@ -141,7 +141,7 @@ class VlanConfigScreen(ModalScreen[dict]):
 
 
     def compose(self) -> ComposeResult:
-        yield Label("VLAN Configuration", id="modal_title")
+        yield Label("VLAN Configuration", id="title")
         with Horizontal():
             yield Label("Base Interface", classes="label-fixed")
             yield Select(self.bond_options, id="base_iface",
@@ -327,7 +327,7 @@ class BondConfigScreen(ModalScreen[dict]):
         self.bond_mode_list = []
 
     def compose(self) -> ComposeResult:
-        yield Label("Bond Configuration", id="modal_title")
+        yield Label("Bond Configuration", id="title")
         with Horizontal():
             yield Label("Name", classes="label-fixed")
             yield Input(
@@ -337,13 +337,13 @@ class BondConfigScreen(ModalScreen[dict]):
                 disabled=self.is_edit_mode
             )
             if self.is_edit_mode:
-                yield Label("Not editable", id="edit_lock_label")
+                yield Label("Not editable", classes="edit_lock_label")
         with Horizontal():
             yield Label("Ports", classes="label-fixed")
             yield Container(id="port_container")
         with Horizontal():
             yield Label("Mode", classes="label-fixed")
-            yield RadioSet(id="mode_list")
+            yield RadioSet(id="bond_mode_list")
         with Horizontal():
             yield Label("Provider Interface?", classes="label-fixed")
             yield Switch(id="is_provider", value=self.is_provider)
