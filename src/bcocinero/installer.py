@@ -787,7 +787,6 @@ class Installer(VerticalScroll):
 
     def handle_save_recipe(self, data: Optional[Dict]) -> None:
         if not data:
-            logging.info("Recipe configuration is cancelled.")
             return
 
         s_recipe_vars = f"{self.install_root_dir}/{_RECIPE_VARS}"
@@ -812,7 +811,6 @@ class Installer(VerticalScroll):
 
     def handle_save_vault(self, data: Optional[dict]) -> None:
         if not data:
-            logging.info("Vault configuration is cancelled.")
             return
 
         is_success = False
