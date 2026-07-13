@@ -48,9 +48,7 @@ class ListVlan(Widget):
     _COL_DELETE = 7
 
     def compose(self) -> ComposeResult:
-        yield DataTable(id="vlan_table",
-                zebra_stripes=True,
-                fixed_rows=1)
+        yield DataTable(id="vlan_table", zebra_stripes=True)
 
     def on_mount(self) -> None:
         table = self.query_one("#vlan_table", DataTable)
@@ -248,9 +246,7 @@ class ListBond(Widget):
     _COL_DELETE = 6
 
     def compose(self) -> ComposeResult:
-        yield DataTable(id="bond_table",
-                        zebra_stripes=True,
-                        fixed_rows=1)
+        yield DataTable(id="bond_table", zebra_stripes=True)
 
     def on_mount(self) -> None:
         table = self.query_one("#bond_table", DataTable)
@@ -367,14 +363,14 @@ class BondConfigScreen(ModalScreen[dict]):
                             id=f"port_{name}"))
 
     def update_mode_list(self) -> None:
-        radioset = self.query_one("#mode_list", RadioSet)
+        radioset = self.query_one("#bond_mode_list", RadioSet)
         radioset.remove_children()
         for mode in self.MODES:
             radioset.mount(RadioButton(mode, value=(mode == self.bond_mode)))
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         if event.pressed:
-            radioset = self.query_one("#mode_list", RadioSet)
+            radioset = self.query_one("#bond_mode_list", RadioSet)
             for btn in radioset.query(RadioButton):
                 btn.value = True if btn == event.pressed else False
 
@@ -386,7 +382,7 @@ class BondConfigScreen(ModalScreen[dict]):
                 for c in self.query("#port_container Checkbox")
                 if c.value
             ])
-            rs = self.query_one("#mode_list", RadioSet)
+            rs = self.query_one("#bond_mode_list", RadioSet)
             mode = str(rs.pressed_button.label) if rs.pressed_button else self.bond_mode
             is_provider = self.query_one("#is_provider").value
 

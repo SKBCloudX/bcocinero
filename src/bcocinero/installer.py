@@ -53,7 +53,7 @@ class ListHost(Widget):
         self.logger = logging.getLogger("bcocinero")
 
     def compose(self) -> ComposeResult:
-        yield DataTable(id="host_table", zebra_stripes=True, fixed_rows=1)
+        yield DataTable(id="host_table", zebra_stripes=True)
 
     def on_mount(self) -> None:
         table = self.query_one("#host_table", DataTable)
@@ -352,7 +352,7 @@ class Installer(VerticalScroll):
             with open(target_path, "r", encoding="utf-8") as f:
                 self.workflow_data = yaml.safe_load(f) or {}
         except Exception as e:
-            logging.warning(f"Failed to load the original recipe: {e}")
+            logging.debug(f"Failed to load the original recipe: {e}")
             self.workflow_data = {
                 "install": {"preparations": [], "playbooks": []}
             }
@@ -829,8 +829,6 @@ class Installer(VerticalScroll):
             self._init_workflow()
         install_data = self.workflow_data.get("install", {})
 
-        if not install_data.get("preparations") and not install_data.get("playbooks"):
-            yield Label("Warning: No workflow data found in recipe.yml!")
         with Horizontal():
             yield Label("Hosts", classes="title")
             yield Button(label="Refresh", id="hosts-refresh",

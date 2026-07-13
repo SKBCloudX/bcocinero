@@ -59,7 +59,6 @@ class ListInterface(Widget):
         yield DataTable(
             id="list_interface_table",
             cursor_type="row",
-            fixed_rows=1,
             zebra_stripes=True
         )
 
