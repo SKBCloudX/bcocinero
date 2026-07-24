@@ -1,4 +1,7 @@
 import logging
+import os
+import shutil
+import sys
 from datetime import datetime
 from textual.app import App, ComposeResult
 from textual.containers import HorizontalScroll, VerticalScroll
@@ -116,6 +119,16 @@ class Bcocinero(App):
         self.push_screen(BcocineroScreen())
 
 def entrypoint() -> None:
+    # check terminal size
+    MIN_COLS = 80
+    MIN_ROWS = 24
+    DEFAULT_TERM = "xterm-256color"
+    cols, rows = shutil.get_terminal_size(fallback=(80, 24))
+    if cols < MIN_COLS or rows < MIN_ROWS:
+        print(f"Error: terminal size ({cols}x{rows}) is smaller than the required size ({MIN_COLS}x{MIN_ROWS}).")
+        sys.exit(1)
+    os.environ["TERM"] = DEFAULT_TERM
+
     app = Bcocinero()
     app.run()
 

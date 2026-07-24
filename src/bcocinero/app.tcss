@@ -1,3 +1,7 @@
+Screen {
+  min-width: 100;
+  min-height: 30;
+}
 Hostname, Nameserver {
   height: auto;
 }
