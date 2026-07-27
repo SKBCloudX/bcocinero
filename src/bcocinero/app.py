@@ -123,7 +123,18 @@ def entrypoint() -> None:
     MIN_COLS = 80
     MIN_ROWS = 24
     DEFAULT_TERM = "xterm-256color"
-    cols, rows = shutil.get_terminal_size(fallback=(80, 24))
+
+    cols, rows = shutil.get_terminal_size(fallback=(0, 0))
+    if cols == 0 and rows == 0:
+        os.environ["COLUMNS"] = "80"
+        os.environ["LINES"] = "24"
+        try:
+            os.system("stty cols 80 rows 24 2>/dev/null")
+        except Exception:
+            pass
+        else:
+            cols, rows = shutil.get_terminal_size(fallback=(0, 0))
+
     if cols < MIN_COLS or rows < MIN_ROWS:
         print(f"Error: terminal size ({cols}x{rows}) is smaller than the required size ({MIN_COLS}x{MIN_ROWS}).")
         sys.exit(1)
