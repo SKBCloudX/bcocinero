@@ -13,7 +13,7 @@ class VaultManager:
 
         inputs = f"{user_pass}\n{os_admin_pass}\n"
 
-        logging.info("Invoke ./run.sh vault...")
+        logging.debug("Invoke ./run.sh vault...")
         try:
             p = subprocess.Popen(
                 ["./run.sh", "vault"],
@@ -28,10 +28,10 @@ class VaultManager:
             out, err = p.communicate(input=inputs)
 
             if p.returncode == 0:
-                logging.info("vault succeeded")
+                logging.info("Vaulting succeeded")
                 return True
             else:
-                logging.error(f"vault failed with exitcode {p.returncode}")
+                logging.error(f"Vaulting failed with exitcode {p.returncode}")
                 return False
         except Exception as e:
             logging.error(f"Failed to execute ./run.sh vault: {e}")

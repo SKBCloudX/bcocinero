@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+import shutil
 import subprocess
 import yaml
 import logging
@@ -331,32 +332,43 @@ class Installer(VerticalScroll):
         self.log_dir = self.home_dir / ".local" / "bcocinero"
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.modal_screen = None
-
-    def _init_workflow(self) -> None:
-        if self.install_root_dir:
-            self.config_path = Path(self.install_root_dir) / "recipe.yml"
-            self.status_path = (
-                self.config_path.parent / f".{self.config_path.name}"
-            )
-            target_path = (
-                self.status_path if self.status_path.exists() else self.config_path
-            )
-        else:
-            self.config_path = None
-            self.status_path = None
-            target_path = None
         self.workflow_data = {}
         self.btn_map = {}
-        
-        try:
-            with open(target_path, "r", encoding="utf-8") as f:
-                self.workflow_data = yaml.safe_load(f) or {}
-        except Exception as e:
-            logging.debug(f"Failed to load the original recipe: {e}")
-            self.workflow_data = {
-                "install": {"preparations": [], "playbooks": []}
-            }
+        self.target_path = None
 
+    def _set_recipes(self) -> None:
+        if self.install_root_dir:
+            config_path = Path(self.install_root_dir) / _RECIPE
+            status_path = Path(self.install_root_dir) / _RECIPE_SAVED
+            if config_path.exists() and (not status_path.exists()):
+                shutil.copyfile(config_path, status_path)
+            self.target_path = status_path
+        
+    def _init_workflow(self) -> None:
+        self._set_recipes()
+        if self.target_path is not None and self.target_path.exists():
+            logging.debug(f"Load the recipe: {self.target_path}.")
+            with open(self.target_path, "r", encoding="utf-8") as f:
+                self.workflow_data = yaml.safe_load(f) or {}
+        else:
+            logging.debug(f"Fail to load the recipe. Initialize the default.")
+            l_preps = [{"name": "prep"}, {"name": "recipe"}, {"name": "vault"}]
+            self.workflow_data = {
+                "install": {"preparations": l_preps, "playbooks": []}
+            }
+        self._sync_btn_map()
+
+    def _sync_btn_map(self) -> None:
+        # sync from self.workflow_data
+        for prep in self.workflow_data.get("preparations", []):
+            name = prep.get("name", None)
+            if name:
+                self.btn_map[f"installer-{name}"] = prep
+        for pb in self.workflow_data.get("playbooks", []):
+            name = pb.get("name", None)
+            if name:
+                self.btn_map[f"playbook-{name}"] = pb
+        
     def _init_ui(self, btn: Button, bar: Optional[ProgressBar] = None) -> None:
         btn.disabled = True
 
@@ -389,27 +401,38 @@ class Installer(VerticalScroll):
 
     def _update_cooking_status(self,
             button_widget: Button, is_success: bool = False) -> None:
+        preparations = self.workflow_data.get("install").get("preparations")
+        playbooks = self.workflow_data.get("install").get("playbooks")
+        target_item = None
         btn_id = button_widget.id
-        if btn_id in self.btn_map:
-            target_item = self.btn_map[btn_id]
+        btn_name = btn_id.split("-", 1)[-1]
+
+        for item in preparations:
+            if item.get("name") == btn_name:
+                target_item = item
+                break
+        for item in playbooks:
+            if item.get("name") == btn_name:
+                target_item = item
+                break
+
+        if target_item is not None:
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             target_item["cooked_at"] = current_time
             target_item["state"] = "pass" if is_success else "fail"
 
             try:
-                with open(self.status_path, "w", encoding="utf-8") as f:
+                with open(self.target_path, "w", encoding="utf-8") as f:
                     yaml.safe_dump(
                         self.workflow_data,
                         f,
                         allow_unicode=True,
                         sort_keys=False
                     )
+                variant = "success" if is_success else "error"
+                self._update_button(button_widget, variant, current_time)
             except Exception as e:
                 logging.error(f"Failed to update cooking status: {e}")
-
-        variant = "success" if is_success else "error"
-
-        self._update_button(button_widget, variant, current_time)
 
         if is_success:
             self._unlock_next_step(btn_id)
@@ -569,6 +592,55 @@ class Installer(VerticalScroll):
             return (False, e.strerror)
         except Exception as e:
             return (False, str(e))
+
+    def _create_playbook_button(self, d_button: dict, b_next: bool) -> Button:
+            name = d_button.get("name", "")
+            state = d_button.get("state", "")
+            cooked_at = d_button.get("cooked_at", "")
+            btn_id = f"playbook-{name}"
+
+            if state == "pass":
+                cook_msg = "Cooked right at"
+                variant = "success"
+            elif state == "fail":
+                cook_msg = "Cooked wrong at"
+                variant = "error"
+            else:
+                cook_msg = ""
+                variant = "default"
+            btn = Button(
+                label=name,
+                id=btn_id,
+                variant=variant,
+                classes="workflow-btn"
+            )
+            btn.disabled = not b_next
+            btn.tooltip = (
+                f"{cook_msg}: {cooked_at}" if state and cooked_at else None
+            )
+
+            return btn
+
+    async def _refresh_playbooks_ui(self) -> None:
+        playbooks_block = self.query_one("#playbooks_block", Container)
+        keys_to_remove = [
+            k for k in self.btn_map if not k.startswith("installer-")
+        ]
+        for key in keys_to_remove:
+            del self.btn_map[key]
+        playbooks_block.remove_children()
+        await asyncio.sleep(0)
+
+        next_button_allowed = True
+        install_data = self.workflow_data.get("install", {})
+        playbooks = install_data.get("playbooks", [])
+
+        for item in playbooks:
+            btn = self._create_playbook_button(item, next_button_allowed)
+            playbooks_block.mount(btn)
+            self.btn_map[btn.id] = item
+            state = item.get("state", "")
+            next_button_allowed = (state == "pass")
 
     def _get_playbook_task_count(self, task_name: str) -> int:
         TASK_REGEX = re.compile(r'^[ ]{6}\S')
@@ -779,11 +851,15 @@ class Installer(VerticalScroll):
             am.save_install_root_file(f"{prep_engine.install_root_dir}")
             logging.info("Prep process is completed successfully.")
             is_success = True
+            self.install_root_dir = prep_engine.install_root_dir
+            self._init_workflow()
+            self.app.call_from_thread(
+                self._update_cooking_status, btn, is_success
+            )
+            self.app.call_from_thread(self._refresh_playbooks_ui)
         except Exception as e:
             logging.error(f"Error during prep: {e}")
             self.app.call_from_thread(status.update, f"[bold red]{str(e)}[/]")
-
-        self.app.call_from_thread(self._update_cooking_status, btn, is_success)
 
     def handle_save_recipe(self, data: Optional[Dict]) -> None:
         if not data:
@@ -801,7 +877,7 @@ class Installer(VerticalScroll):
 
         b_ret_cached, msg_saved = self._cache_recipe(s_recipe_saved, data)
         if b_ret_cached:
-            logging.info(f"{_RECIPE_SAVED} is saved.")
+            logging.debug(f"{_RECIPE_SAVED} is saved.")
         else:
             logging.error(f"Fail to save {_RECIPE_SAVED}: {msg_saved}")
 
@@ -866,6 +942,7 @@ class Installer(VerticalScroll):
                     )
                     yield btn
                     self.btn_map[btn_id] = item
+                    state = item.get("state", "")
                     next_button_allowed = (state == "pass")
 
         yield Static("", id="prep-status")
@@ -890,25 +967,10 @@ class Installer(VerticalScroll):
                     yield cooking_btn
                 with Container(id="playbooks_block"):
                     for item in install_data["playbooks"]:
-                        name = item["name"]
-                        state = item.get("state", "")
-                        cooked_at = item.get("cooked_at", "")
-                        btn_id = f"playbook-{name}"
-                        if state == "pass":
-                            cook_msg = "Cooked right at"
-                            variant = "success"
-                        elif state == "fail":
-                            cook_msg = "Cooked wrong at"
-                            variant = "error"
-                        else:
-                            variant = "default"
-                        btn = Button(label=name, id=btn_id, variant=variant,
-                                classes="workflow-btn")
-                        btn.disabled = not next_button_allowed
-                        btn.tooltip = (
-                            f"{cook_msg}: {cooked_at}" if state and cooked_at
-                            else None
+                        btn = self._create_playbook_button(
+                            item, next_button_allowed
                         )
                         yield btn
-                        self.btn_map[btn_id] = item
+                        self.btn_map[btn.id] = item
+                        state = item.get("state", "")
                         next_button_allowed = (state == "pass")

@@ -30,7 +30,7 @@ class Prep:
             if mgmt_ip:
                 with open(mgmt_file, "w") as f:
                     f.write(mgmt_ip)
-                logging.info("Created .mgmt_ip with {mgmt_ip}")
+                logging.debug(f"Created .mgmt_ip with {mgmt_ip}")
             else:
                 logging.error("Cannot create .mgmt_ip.")
         except Exception as e:
