@@ -2,6 +2,7 @@ import logging
 import os
 import shutil
 import sys
+import subprocess
 from datetime import datetime
 from textual.app import App, ComposeResult
 from textual.containers import HorizontalScroll, VerticalScroll
@@ -38,7 +39,6 @@ class BcocineroScreen(Screen):
 
     def compose(self) -> ComposeResult:
         self.header = Header(show_clock=True, icon="B")
-        self.footer = Footer(show_command_palette=False)
         yield self.header
         with TabbedContent(initial="dashboard", id="main"):
             with TabPane("[red][b]D[/b][/red]ashboard", id="dashboard"):
@@ -118,6 +118,15 @@ class Bcocinero(App):
         self.bc_logger = BcocineroLogger(self)
         self.push_screen(BcocineroScreen())
 
+def _run_sysctl(command_args: list[str]) -> str:
+    result = subprocess.run(
+        ["sudo", "sysctl"] + command_args,
+        capture_output=True,
+        text=True,
+        check=True
+    )
+    return result.stdout.strip()
+
 def entrypoint() -> None:
     # check terminal size
     MIN_COLS = 80
@@ -140,8 +149,33 @@ def entrypoint() -> None:
         sys.exit(1)
     os.environ["TERM"] = DEFAULT_TERM
 
-    app = Bcocinero()
-    app.run()
+    try:
+        stdout = _run_sysctl(["kernel.printk"])
+        original_printk = stdout.split("=")[-1].strip()
+
+        parts = original_printk.split()
+        if len(parts) == 4:
+            parts[0] = "1"
+            mute_printk = " ".join(parts)
+        else:
+            mute_printk = "1 4 1 7"
+    except Exception:
+      pass
+
+    try:
+        _run_sysctl(["-w", f"kernel.printk={mute_printk}"])
+        app = Bcocinero()
+        app.run()
+    except Exception as e:
+        print(f"\nApplication error occurred: {e}", file=sys.stderr)
+    finally:
+        try:
+            _run_sysctl(["-w", f"kernel.printk={original_printk}"])
+        except Exception:
+            print(
+                "[Warn] Failed to restore original kernel.printk log level.",
+                file=sys.stderr
+            )
 
 if __name__ == "__main__":
     entrypoint()
