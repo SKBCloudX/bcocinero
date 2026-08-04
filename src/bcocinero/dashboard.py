@@ -249,6 +249,9 @@ class Dashboard(VerticalScroll):
             hostname_widget.nameserver = result["nameserver"]
             hostname_widget.role = result["role"]
 
+            # update app title appending hostname
+            self.app.title += f"@{result['hostname']}"
+
             self._toggle_installer_visibility(result["role"])
             if hasattr(self.app.screen, "update_tabs_visibility"):
                 self.app.screen.update_tabs_visibility()
