@@ -5,12 +5,15 @@ import sys
 import subprocess
 from datetime import datetime
 from textual.app import App, ComposeResult
-from textual.containers import HorizontalScroll, VerticalScroll
+from textual.containers import Grid, HorizontalScroll, VerticalScroll
 from textual.css.query import NoMatches
 from textual.reactive import reactive
-from textual.screen import Screen
+from textual.screen import ModalScreen, Screen
 from textual.widget import Widget
-from textual.widgets import Footer, Header, TabbedContent, TabPane, RichLog
+from textual.widgets import (
+    Button, Footer, Header, Label,
+    TabbedContent, TabPane, RichLog
+)
 from bcocinero.common_logger import BcocineroLogger
 from bcocinero.dashboard import Dashboard
 from bcocinero.hostnetwork import HostNetwork
@@ -20,6 +23,21 @@ from bcocinero.nm_helpers import (
     NetworkManager,
     NodeRole
 )
+
+class QuitScreen(ModalScreen[bool]):
+    def compose(self) -> ComposeResult:
+        yield Grid(
+            Label("Are you sure you want to quit the program?", id="confirm"),
+            Button("Quit", variant="error", id="quit-btn"),
+            Button("Cancel", variant="primary", id="cancel-btn"),
+            id="confirm_dialog"
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "quit-btn":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
 
 class BcocineroScreen(Screen):
     CSS_PATH = ["app.tcss"]
@@ -47,6 +65,7 @@ class BcocineroScreen(Screen):
                 yield HostNetwork()
         yield RichLog(id="main_log", auto_scroll=True, markup=True,
                       highlight=True)
+        yield Footer(show_command_palette=False)
 
     def action_switch_tab(self, tab: str) -> None:
         try:
@@ -95,6 +114,13 @@ class Bcocinero(App):
         "WARN": "yellow",
         "ERROR": "red",
     }
+    BINDINGS = [("ctrl+q", "request_quit", "Quit")]
+    def action_request_quit(self) -> None:
+        def check_quit(b_quit: bool) -> None:
+            if b_quit:
+                self.exit()
+        self.push_screen(QuitScreen(), check_quit)
+
     def post_log(self, msg: str, level: str = "INFO") -> None:
         try:
             log_widget = self.screen.query_one("#main_log", RichLog)
