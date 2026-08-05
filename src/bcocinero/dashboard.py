@@ -27,6 +27,7 @@ from bcocinero.nm_helpers import (
     NodeRole
 )
 from bcocinero.install_tracker import InstallTracker
+from bcocinero import TITLE
 
 _HOSTNAME_RE = re.compile(
     r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$"
@@ -250,7 +251,7 @@ class Dashboard(VerticalScroll):
             hostname_widget.role = result["role"]
 
             # update app title appending hostname
-            self.app.title += f"@{result['hostname']}"
+            self.app.title = f"{TITLE}@{result['hostname']}"
 
             self._toggle_installer_visibility(result["role"])
             if hasattr(self.app.screen, "update_tabs_visibility"):

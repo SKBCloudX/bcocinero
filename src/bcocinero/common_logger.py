@@ -53,7 +53,14 @@ class BcocineroLogger:
         debug_file_handler.setFormatter(file_formatter)
         debug_file_handler.setLevel(logging.DEBUG)
         self.logger.addHandler(debug_file_handler)
-        
+
+        # show project information (title, sub_title, and version)
+        self.logger.info("=" * 50)
+        self.logger.info(
+            f"{self.app.title} {self.app.sub_title} ({self.app.version})"
+        )
+        self.logger.info("=" * 50)
+
         textual_formatter = logging.Formatter('%(message)s')
         textual_handler = TextualLogHandler(self.app)
         textual_handler.setFormatter(textual_formatter)
