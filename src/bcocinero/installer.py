@@ -401,6 +401,16 @@ class Installer(VerticalScroll):
 
     def _update_cooking_status(self,
             button_widget: Button, is_success: bool = False) -> None:
+        # update button depending on is_success
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        variant = "success" if is_success else "error"
+        self._update_button(button_widget, variant, current_time)
+
+        # check self.target_path exists
+        if self.target_path is None or not self.target_path.exists():
+            logging.debug("Not update cooking status: Recipe does not exist.")
+            return
+
         preparations = self.workflow_data.get("install").get("preparations")
         playbooks = self.workflow_data.get("install").get("playbooks")
         target_item = None
@@ -417,7 +427,6 @@ class Installer(VerticalScroll):
                 break
 
         if target_item is not None:
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             target_item["cooked_at"] = current_time
             target_item["state"] = "pass" if is_success else "fail"
 
@@ -429,8 +438,6 @@ class Installer(VerticalScroll):
                         allow_unicode=True,
                         sort_keys=False
                     )
-                variant = "success" if is_success else "error"
-                self._update_button(button_widget, variant, current_time)
             except Exception as e:
                 logging.error(f"Failed to update cooking status: {e}")
 
@@ -631,9 +638,12 @@ class Installer(VerticalScroll):
         playbooks_block.remove_children()
         await asyncio.sleep(0)
 
-        next_button_allowed = True
         install_data = self.workflow_data.get("install", {})
         playbooks = install_data.get("playbooks", [])
+        next_button_allowed = all(
+            item.get("state", "") == "pass"
+            for item in install_data.get("preparations", [])
+        )
 
         for item in playbooks:
             btn = self._create_playbook_button(item, next_button_allowed)
@@ -849,17 +859,19 @@ class Installer(VerticalScroll):
                 prep_engine.install_root_dir
             )
             am.save_install_root_file(f"{prep_engine.install_root_dir}")
-            logging.info("Prep process is completed successfully.")
             is_success = True
             self.install_root_dir = prep_engine.install_root_dir
+            logging.info("Prep process is completed successfully.")
+        except Exception as e:
+            logging.error(f"Error during prep: {e}")
+            self.app.call_from_thread(self._init_ui, btn, bar)
+            self.app.call_from_thread(status.update, f"[bold red]{str(e)}[/]")
+        finally:
             self._init_workflow()
             self.app.call_from_thread(
                 self._update_cooking_status, btn, is_success
             )
             self.app.call_from_thread(self._refresh_playbooks_ui)
-        except Exception as e:
-            logging.error(f"Error during prep: {e}")
-            self.app.call_from_thread(status.update, f"[bold red]{str(e)}[/]")
 
     def handle_save_recipe(self, data: Optional[Dict]) -> None:
         if not data:
