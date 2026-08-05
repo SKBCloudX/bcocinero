@@ -1,6 +1,7 @@
 import logging
 import os
 import shutil
+import socket
 import sys
 import subprocess
 from datetime import datetime
@@ -14,6 +15,7 @@ from textual.widgets import (
     Button, Footer, Header, Label,
     TabbedContent, TabPane, RichLog
 )
+from bcocinero import TITLE, SUB_TITLE, __version__
 from bcocinero.common_logger import BcocineroLogger
 from bcocinero.dashboard import Dashboard
 from bcocinero.hostnetwork import HostNetwork
@@ -108,13 +110,14 @@ class BcocineroScreen(Screen):
 
 class Bcocinero(App):
     """Burrito Chef"""
-
+    APP_VERSION = f"v{__version__}"
     LEVEL_COLORS = {
         "INFO": "green",
         "WARN": "yellow",
         "ERROR": "red",
     }
-    BINDINGS = [("ctrl+q", "request_quit", "Quit")]
+    BINDINGS = [("ctrl+q", "request_quit", f"Quit ({APP_VERSION})")]
+
     def action_request_quit(self) -> None:
         def check_quit(b_quit: bool) -> None:
             if b_quit:
@@ -137,8 +140,9 @@ class Bcocinero(App):
             self.log("Cannot find #dashboard_interface widget")
 
     def on_mount(self) -> None:
-        self.title = "CloudX"
-        self.sub_title = "TUI Installer"
+        self.title = f"{TITLE}@{socket.gethostname()}"
+        self.sub_title = SUB_TITLE
+        self.version = self.APP_VERSION
 
     def on_ready(self) -> None:
         self.bc_logger = BcocineroLogger(self)
