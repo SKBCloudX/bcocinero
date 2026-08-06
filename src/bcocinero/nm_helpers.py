@@ -138,7 +138,8 @@ class InventoryGenerator:
         control_nodes = [h['hostname'] for h in self.hosts if h['role'].is_control_type]
         compute_nodes = [h['hostname'] for h in self.hosts if h['role']  == NodeRole.COMPUTE]
         lines.append("[clients]")
-        lines.extend(control_nodes + compute_nodes)
+        if num_storage:
+            lines.extend(control_nodes + compute_nodes)
 
         lines.append("\n# kubernetes nodes")
         lines.append("[kube_control_plane]")
@@ -153,13 +154,16 @@ class InventoryGenerator:
         lines.extend(compute_nodes)
 
         lines.append("\n[etcd]")
+        etcd_nodes = []
         if len(control_nodes) >= 3:
-            lines.extend(control_nodes)
-        else:
-            etcd_nodes = list(control_nodes)
+            etcd_nodes = control_nodes[:3]
+        elif len(control_nodes) > 1:
+            etcd_nodes = control_nodes
             if compute_nodes:
                 etcd_nodes.append(compute_nodes[0])
-            lines.extend(etcd_nodes)
+        else:
+            etcd_nodes = control_nodes
+        lines.extend(etcd_nodes)
 
         sgw_nodes = (
             [h['hostname'] for h in self.hosts if h['role']  == NodeRole.SGW]
