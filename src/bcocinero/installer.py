@@ -224,7 +224,7 @@ class RecipeModal(ModalScreen[dict]):
                         "managementLIF": raw.get("netapp_mgmt_lif", ""),
                         "dataLIF": raw.get("netapp_data_lif1", ""),
                         "transportType": q_transport,
-                        "svm1": raw.get("netapp_svm1", ""),
+                        "svm": raw.get("netapp_svm1", ""),
                         "username": raw.get("netapp_user", ""),
                         "password": q_password,
                         "nfsMountOptions": q_nfsopts,
@@ -235,7 +235,7 @@ class RecipeModal(ModalScreen[dict]):
                         "managementLIF": raw.get("netapp_mgmt_lif", ""),
                         "dataLIF": raw.get("netapp_data_lif2", ""),
                         "transportType": q_transport,
-                        "svm2": raw.get("netapp_svm2", ""),
+                        "svm": raw.get("netapp_svm2", ""),
                         "username": raw.get("netapp_user", ""),
                         "password": q_password,
                         "nfsMountOptions": q_nfsopts,
@@ -552,12 +552,13 @@ class Installer(VerticalScroll):
                 
                 netapp_lookup = {
                     "netapp_mgmt_lif": tmpl1.get("managementLIF"),
-                    "netapp_svm": tmpl1.get("svm"),
                     "netapp_user": tmpl1.get("username"),
                     "netapp_pass": tmpl1.get("password"),
                     "netapp_data_lif1": tmpl1.get("dataLIF"),
+                    "netapp_svm1": tmpl1.get("svm"),
                     "netapp_shares1": tmpl1.get("shares")[0] if tmpl1.get("shares") else "",
                     "netapp_data_lif2": tmpl2.get("dataLIF"),
+                    "netapp_svm2": tmpl2.get("svm"),
                     "netapp_shares2": tmpl2.get("shares")[0] if tmpl2.get("shares") else "",
                 }
 
