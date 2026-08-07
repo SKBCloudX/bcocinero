@@ -152,39 +152,43 @@ class Bcocinero(App):
 def _is_console() -> bool:
     try:
         ttyname = os.ttyname(sys.stdout.fileno())
-        return (
-            ttyname.startswith("/dev/tty") and
-            not ttyname.startswith("/dev/ttyS")
-        )
+        return ttyname.startswith("/dev/tty")
     except Exception:
         return False
 
 @contextmanager
 def mute_console_messages():
     is_mute = _is_console()
+    original_printk = None
+
     if is_mute:
         try:
+            result = subprocess.run(
+                ["sysctl", "-n", "kernel.printk"],
+                capture_output=True, text=True, check=True
+            )
+            original_printk = result.stdout.strip()
+
             subprocess.run(
-                ["setterm", "--msg", "off"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False
+                ["sudo", "sysctl", "-w", "kernel.printk=0 4 1 7"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                check=True
             )
         except FileNotFoundError:
-            pass
+            original_printk = None
 
     try:
         yield
     finally:
-        if is_mute:
+        if is_mute and original_printk:
             try:
                 subprocess.run(
-                    ["setterm", "--msg", "on"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    check=False
+                    ["sudo", "sysctl", "-w",
+                     f"kernel.printk={original_printk}"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    check=True
                 )
-            except FileNotFoundError:
+            except Exception:
                 pass
 
 def entrypoint() -> None:
