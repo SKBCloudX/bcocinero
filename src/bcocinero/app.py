@@ -4,6 +4,7 @@ import shutil
 import socket
 import sys
 import subprocess
+from contextlib import contextmanager
 from datetime import datetime
 from textual.app import App, ComposeResult
 from textual.containers import Grid, HorizontalScroll, VerticalScroll
@@ -148,14 +149,43 @@ class Bcocinero(App):
         self.bc_logger = BcocineroLogger(self)
         self.push_screen(BcocineroScreen())
 
-def _run_sysctl(command_args: list[str]) -> str:
-    result = subprocess.run(
-        ["sudo", "sysctl"] + command_args,
-        capture_output=True,
-        text=True,
-        check=True
-    )
-    return result.stdout.strip()
+def _is_console() -> bool:
+    try:
+        ttyname = os.ttyname(sys.stdout.fileno())
+        return (
+            ttyname.startswith("/dev/tty") and
+            not ttyname.startswith("/dev/ttyS")
+        )
+    except Exception:
+        return False
+
+@contextmanager
+def mute_console_messages():
+    is_mute = _is_console()
+    if is_mute:
+        try:
+            subprocess.run(
+                ["setterm", "--msg", "off"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False
+            )
+        except FileNotFoundError:
+            pass
+
+    try:
+        yield
+    finally:
+        if is_mute:
+            try:
+                subprocess.run(
+                    ["setterm", "--msg", "on"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False
+                )
+            except FileNotFoundError:
+                pass
 
 def entrypoint() -> None:
     # check terminal size
@@ -179,33 +209,9 @@ def entrypoint() -> None:
         sys.exit(1)
     os.environ["TERM"] = DEFAULT_TERM
 
-    try:
-        stdout = _run_sysctl(["kernel.printk"])
-        original_printk = stdout.split("=")[-1].strip()
-
-        parts = original_printk.split()
-        if len(parts) == 4:
-            parts[0] = "1"
-            mute_printk = " ".join(parts)
-        else:
-            mute_printk = "1 4 1 7"
-    except Exception:
-      pass
-
-    try:
-        _run_sysctl(["-w", f"kernel.printk={mute_printk}"])
-        app = Bcocinero()
+    app = Bcocinero()
+    with mute_console_messages():
         app.run()
-    except Exception as e:
-        print(f"\nApplication error occurred: {e}", file=sys.stderr)
-    finally:
-        try:
-            _run_sysctl(["-w", f"kernel.printk={original_printk}"])
-        except Exception:
-            print(
-                "[Warn] Failed to restore original kernel.printk log level.",
-                file=sys.stderr
-            )
 
 if __name__ == "__main__":
     entrypoint()
