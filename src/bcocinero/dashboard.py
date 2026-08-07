@@ -43,7 +43,8 @@ class Hostname(Widget):
     def on_mount(self) -> None:
         host_data = nm.get_host_info()
         self.hostname = host_data["hostname"]
-        self.nameserver = ",".join(host_data["nameservers"])
+        ns = ",".join(host_data["nameservers"])
+        self.nameserver = ns if ns else "8.8.8.8"
         self.role = host_data["role"]
     def render(self) -> str:
         return f"Hostname: {self.hostname} ({self.role}) / DNS: {self.nameserver}"
