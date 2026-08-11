@@ -170,7 +170,7 @@ def mute_console_messages():
             original_printk = result.stdout.strip()
 
             subprocess.run(
-                ["sudo", "sysctl", "-w", "kernel.printk=0 4 1 7"],
+                ["sudo", "sysctl", "-w", "kernel.printk=1 4 1 7"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 check=True
             )
