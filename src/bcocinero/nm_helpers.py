@@ -70,7 +70,6 @@ class NodeRole(Enum):
     CONTROL = "Control"
     COMPUTE = "Compute"
     STORAGE = "Storage"
-    SGW = "SGW"
     NONE = ""
 
     @property
@@ -164,13 +163,6 @@ class InventoryGenerator:
         else:
             etcd_nodes = control_nodes
         lines.extend(etcd_nodes)
-
-        sgw_nodes = (
-            [h['hostname'] for h in self.hosts if h['role']  == NodeRole.SGW]
-        )
-        if len(sgw_nodes) > 0:
-            lines.append("\n[sgw_node]")
-            lines.extend(sgw_nodes)
 
         lines.append("")
 
@@ -465,18 +457,30 @@ class NetworkManager:
     def create_vlan_state(self, name: str, base_iface: str, vlan_id: int, 
                           ip: str = "", prefix: int = 24,
                           gw: str = "", profile: str = "") -> Dict[str, Any]:
+        # define metrics for each profile
+        d_metrics = {
+            "management": 100,
+            "service": 200,
+            "storage": 300,
+        }
+        i_metric = d_metrics.get(profile.lower().strip() if profile else "")
+
         vlan_iface: Dict[str, Any] = {
             "name": name, "type": "vlan", "state": "up",
             "vlan": {"base-iface": base_iface, "id": vlan_id}
         }
+
         if profile:
             vlan_iface["profile-name"] = profile
+
         if ip:
             vlan_iface["ipv4"] = {
                 "enabled": True,
                 "address": [{"ip": ip.strip(), "prefix-length": prefix}],
                 "dhcp": False
             }
+            if i_metric is not None:
+                vlan_iface["ipv4"]["prefix-route-metric"] = i_metric
 
         desired_state = {"interfaces": [vlan_iface]}
         if ip and gw:
