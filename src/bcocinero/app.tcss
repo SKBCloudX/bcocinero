@@ -21,8 +21,8 @@ Button {
   grid-gutter: 1;
   grid-rows: 1fr 3;
   padding: 1 2;
-  width: 40;
-  height: 11;
+  width: 50;
+  height: 15;
   border: thick $primary;
   background: $surface;
   align: center middle;

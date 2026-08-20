@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from rich.markup import escape
 from textual import on, work
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, VerticalScroll
+from textual.containers import Container, Grid, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import (
@@ -81,6 +81,25 @@ class ListHost(Widget):
 
         gen = InventoryGenerator(self.db_hostdata)
         gen.generate(f"{install_root_dir}/hosts")
+
+class ConfirmRunModal(ModalScreen[bool]):
+    def __init__(self, message: str, **kwargs):
+        super().__init__(**kwargs)
+        self.message = message
+
+    def compose(self) -> ComposeResult:
+        yield Grid(
+            Label(self.message, id="confirm"),
+            Button("Yes", variant="primary", id="yes"),
+            Button("No", variant="error", id="no"),
+            id="confirm_dialog"
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "yes":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
 
 class InventoryViewModal(ModalScreen[None]):
     def __init__(self, list_host_obj: ListHost):
@@ -693,7 +712,7 @@ class Installer(VerticalScroll):
         try:
             with open(log_file_path, "w", encoding="utf-8") as log_f:
                 process = await asyncio.create_subprocess_exec(
-                    "./run.sh", task_name,
+                    "./run.sh", "-f", task_name,
                     stdin=asyncio.subprocess.DEVNULL,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.STDOUT,
@@ -774,7 +793,30 @@ class Installer(VerticalScroll):
             event.button.disabled = True
             self.run_cook_all(event.button)
         elif btn_id.startswith("playbook-"):
-            self.run_playbook(event.button)
+            self.check_and_run_playbook(event.button)
+
+    def check_and_run_playbook(self, button_widget: Button) -> None:
+        btn_id = button_widget.id
+        item = self.btn_map.get(btn_id, {})
+
+        pname = item.get("name", "")
+        state = item.get("state", "")
+        cooked_at = item.get("cooked_at", "")
+
+        # If the playbook has already passed, request confirmation first
+        if state == "pass":
+            msg = (
+                f"{pname} is already run at {cooked_at}.\n"
+                "Do you want to force to run it again?"
+            )
+
+            def handle_confirmation(confirmed: Optional[bool]) -> None:
+                if confirmed:
+                    self.run_playbook(button_widget)
+
+            self.app.push_screen(ConfirmRunModal(msg), handle_confirmation)
+        else:
+            self.run_playbook(button_widget)
 
     @work
     async def run_cook_all(self, btn: Button) -> None:
