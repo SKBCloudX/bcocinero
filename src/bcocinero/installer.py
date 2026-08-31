@@ -988,8 +988,7 @@ class Installer(VerticalScroll):
                         variant = "error"
                     else:
                         variant = "default"
-                    btn = Button(label=name, id=btn_id, variant=variant,
-                                 classes="workflow-btn")
+                    btn = Button(label=name, id=btn_id, variant=variant)
                     btn.disabled = not next_button_allowed
                     btn.tooltip = (
                         f"{cook_msg}: {cooked_at}" if state and cooked_at

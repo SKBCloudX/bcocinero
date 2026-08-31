@@ -62,8 +62,8 @@ class ListVlan(Widget):
         for row in l_vlan_data:
             table.add_row(
                 *row,
-                "[#000000 on #00afaf]EDIT[/]",
-                "[#ffffff on #af0000]DELETE[/]"
+                "[#000000 on #00ff00]EDIT[/]",
+                "[#ffffff on #ff0000]DELETE[/]"
             )
 
     def on_data_table_cell_selected(self,
@@ -260,8 +260,8 @@ class ListBond(Widget):
         for row in l_bond_data:
             table.add_row(
                 *row,
-                "[#000000 on #00afaf] EDIT [/]",
-                "[#ffffff on #af0000] DELETE [/]"
+                "[#000000 on #00ff00]EDIT[/]",
+                "[#ffffff on #ff0000]DELETE[/]"
             )
 
     def on_data_table_cell_selected(self,

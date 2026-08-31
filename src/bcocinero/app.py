@@ -31,8 +31,8 @@ class QuitScreen(ModalScreen[bool]):
     def compose(self) -> ComposeResult:
         yield Grid(
             Label("Are you sure you want to quit the program?", id="confirm"),
-            Button("Quit", variant="error", id="quit-btn"),
-            Button("Cancel", variant="primary", id="cancel-btn"),
+            Button("Quit", variant="primary", id="quit-btn"),
+            Button("Cancel", variant="error", id="cancel-btn"),
             id="confirm_dialog"
         )
 
@@ -216,6 +216,7 @@ def entrypoint() -> None:
     app = Bcocinero()
     with mute_console_messages():
         app.run()
+        os.system("clear")
 
 if __name__ == "__main__":
     entrypoint()
