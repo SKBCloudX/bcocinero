@@ -1,6 +1,6 @@
 [project]
 name = "bcocinero"
-version = "0.1.5"
+version = "0.1.6"
 description = "TUI App for burrito"
 authors = [
     { name = "Heechul Kim", email = "jijisa@iorchard.co.kr" }
