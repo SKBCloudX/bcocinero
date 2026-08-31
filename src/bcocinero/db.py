@@ -53,7 +53,18 @@ class BcocineroDB:
 
     def get_all_hosts(self) -> List[Dict[str, Any]]:
         hosts = []
-        sql = "SELECT hostname, mgmt_ip, role, updated_at FROM hosts"
+        sql = """
+        SELECT hostname, mgmt_ip, role, updated_at FROM hosts
+        ORDER BY
+          CASE role
+            WHEN 'HeadControl' THEN 1
+            WHEN 'Control'     THEN 2
+            WHEN 'Compute'     THEN 3
+            WHEN 'Storage'     THEN 4
+            ELSE 5
+          END,
+          hostname ASC
+        """
         try:
             r = self.cursor.execute(sql)
             now = datetime.now(timezone.utc)
